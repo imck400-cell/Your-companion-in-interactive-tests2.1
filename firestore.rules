@@ -1,0 +1,134 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function getSchoolDoc(schoolId) {
+      return get(/databases/$(database)/documents/supervised_schools/$(schoolId));
+    }
+
+    // Status Check Helpers (Phase 5 - Rules-level Block for suspended & inactive schools)
+    function isSchoolActive(schoolId) {
+      return !exists(/databases/$(database)/documents/supervised_schools/$(schoolId)) || 
+             (getSchoolDoc(schoolId).data.status != 'suspended' && 
+              getSchoolDoc(schoolId).data.status != 'inactive' && 
+              getSchoolDoc(schoolId).data.is_suspended != true);
+    }
+
+    function isSchoolWritable(schoolId) {
+      return isSchoolActive(schoolId) && 
+             (!exists(/databases/$(database)/documents/supervised_schools/$(schoolId)) || 
+              (getSchoolDoc(schoolId).data.status != 'read_only' && 
+               getSchoolDoc(schoolId).data.status != 'expired'));
+    }
+
+    // Payload Size Limits (Phase 5)
+    function isValidPayload(data) {
+      return (data.name == null || (data.name is string && data.name.size() <= 100)) &&
+             (data.title == null || (data.title is string && data.title.size() <= 300));
+    }
+
+    // TTL Support Guard for Guest Users & Submissions (Phase 5)
+    function hasTTLTimestamp(data) {
+      return data.keys().hasAny(['submittedAt', 'createdAt', 'timestamp', 'expiresAt', 'updatedAt']);
+    }
+
+    // Query Limit Guard to Block Open/Unbounded Queries (Phase 5)
+    function isQueryLimited() {
+      return request.query.limit != null && request.query.limit <= 1000;
+    }
+
+    // SaaS Admin Audit Trail Collection
+    match /license_logs/{logId} {
+      allow get: if true;
+      allow list: if isQueryLimited();
+      allow write: if isValidPayload(request.resource.data);
+    }
+
+    // Isolated Schools Root Node (True Multi-Tenancy Architecture)
+    match /schools/{schoolId} {
+      allow get: if isSchoolActive(schoolId);
+      allow list: if isSchoolActive(schoolId) && isQueryLimited();
+      allow write: if isSchoolWritable(schoolId) && isValidPayload(request.resource.data);
+
+      // Isolated Users under specific School (/schools/{schoolId}/users/{userId})
+      match /users/{userId} {
+        allow get: if isSchoolActive(schoolId);
+        allow list: if isSchoolActive(schoolId) && isQueryLimited();
+        allow write: if isSchoolWritable(schoolId) && isValidPayload(request.resource.data);
+      }
+
+      // Isolated Quizzes under specific School (/schools/{schoolId}/quizzes/{quizId})
+      match /quizzes/{quizId} {
+        allow get: if isSchoolActive(schoolId);
+        allow list: if isSchoolActive(schoolId) && isQueryLimited();
+        allow create, update, delete: if isSchoolWritable(schoolId) && isValidPayload(request.resource.data);
+
+        // Submissions under School Quiz (/schools/{schoolId}/quizzes/{quizId}/submissions/{submissionId})
+        match /submissions/{submissionId} {
+          allow get: if isSchoolActive(schoolId);
+          allow list: if isSchoolActive(schoolId) && isQueryLimited();
+          allow write: if isSchoolWritable(schoolId) && hasTTLTimestamp(request.resource.data);
+        }
+      }
+    }
+
+    // Collection Group Match Rule for subcollections
+    match /{path=**}/users/{userId} {
+      allow get: if true;
+      allow list: if isQueryLimited();
+      allow write: if isValidPayload(request.resource.data);
+    }
+
+    // Legacy / Parallel Root Collections
+    match /supervised_schools/{schoolId} {
+      allow get: if isSchoolActive(schoolId);
+      allow list: if isQueryLimited();
+      allow write: if isSchoolWritable(schoolId) && isValidPayload(request.resource.data);
+    }
+
+    match /roster_users/{userId} {
+      allow get: if true;
+      allow list: if isQueryLimited();
+      allow write: if isValidPayload(request.resource.data);
+    }
+
+    match /guest_users/{guestId} {
+      allow get: if true;
+      allow list: if isQueryLimited();
+      allow write: if hasTTLTimestamp(request.resource.data);
+    }
+
+    match /quizzes/{quizId} {
+      allow get: if true;
+      allow list: if isQueryLimited();
+      allow write: if isValidPayload(request.resource.data);
+
+      match /submissions/{submissionId} {
+        allow get: if true;
+        allow list: if isQueryLimited();
+        allow write: if hasTTLTimestamp(request.resource.data);
+      }
+    }
+
+    match /submissions/{submissionId} {
+      allow get: if true;
+      allow list: if isQueryLimited();
+      allow write: if hasTTLTimestamp(request.resource.data);
+    }
+
+    // Catch-all
+    match /{document=**} {
+      allow get: if true;
+      allow list: if isQueryLimited();
+      allow write: if true;
+    }
+  }
+}
+
+

@@ -1,0 +1,104 @@
+{
+  "entities": {
+    "schools": {
+      "title": "Supervised School",
+      "description": "School entity for multi-tenancy isolation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "branch": { "type": "string" },
+        "city": { "type": "string" },
+        "activationYear": { "type": "string" },
+        "teacherCount": { "type": "number" },
+        "studentCount": { "type": "number" }
+      },
+      "required": ["name"]
+    },
+    "users": {
+      "title": "Roster User",
+      "description": "Student or Teacher account under a school",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "serialNumber": { "type": "string" },
+        "code": { "type": "string" },
+        "role": { "type": "string" },
+        "schoolName": { "type": "string" },
+        "branch": { "type": "string" },
+        "grade": { "type": "string" },
+        "section": { "type": "string" }
+      },
+      "required": ["name", "serialNumber"]
+    },
+    "quizzes": {
+      "title": "Quiz Item",
+      "description": "Interactive Quizzes created by teachers",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "subject": { "type": "string" },
+        "grade": { "type": "string" },
+        "section": { "type": "string" },
+        "teacherName": { "type": "string" },
+        "schoolName": { "type": "string" },
+        "branch": { "type": "string" },
+        "schoolYear": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "showFeedback": { "type": "string" },
+        "questions": { "type": "array" }
+      },
+      "required": ["title", "subject", "questions"]
+    },
+    "submissions": {
+      "title": "Student Submissions",
+      "description": "Student quiz participation results",
+      "type": "object",
+      "properties": {
+        "quizId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "grade": { "type": "string" },
+        "section": { "type": "string" },
+        "score": { "type": "number" },
+        "maxScore": { "type": "number" },
+        "correctCount": { "type": "number" },
+        "incorrectCount": { "type": "number" },
+        "skippedCount": { "type": "number" },
+        "submittedAt": { "type": "string" },
+        "totalTimeSpentSeconds": { "type": "number" }
+      },
+      "required": ["quizId", "studentName", "score"]
+    }
+  },
+  "firestore": {
+    "/schools/{schoolId}": {
+      "schema": "schools",
+      "description": "Isolated school root node"
+    },
+    "/schools/{schoolId}/users/{userId}": {
+      "schema": "users",
+      "description": "Users (students/teachers) isolated per school"
+    },
+    "/schools/{schoolId}/quizzes/{quizId}": {
+      "schema": "quizzes",
+      "description": "Quizzes isolated per school"
+    },
+    "/schools/{schoolId}/quizzes/{quizId}/submissions/{submissionId}": {
+      "schema": "submissions",
+      "description": "Submissions isolated per school and quiz"
+    },
+    "/quizzes/{quizId}": {
+      "schema": "quizzes",
+      "description": "Global or fallback quizzes"
+    },
+    "/submissions/{submissionId}": {
+      "schema": "submissions",
+      "description": "Direct student submissions fallback"
+    },
+    "/roster_users/{userId}": {
+      "schema": "users",
+      "description": "Roster users fallback"
+    }
+  }
+}

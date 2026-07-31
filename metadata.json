@@ -1,0 +1,8 @@
+{
+  "name": "لارافل رفيقك في الاختبارات التفاعلية",
+  "description": "منصة إلكترونية وافية للمعلمين والطلاب لإعداد وتأدية الاختبارات التفاعلية مع دعم العمل بدون اتصال بالإنترنت والمزامنة التلقائية مع Firebase.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
