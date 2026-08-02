@@ -45,7 +45,7 @@ jobs:
           port: ${{ secrets.SSH_PORT }}
           password: ${{ secrets.SSH_PASSWORD }}
           source: "quiz-backend/*"
-          target: "/home/u556728454/domains/rafiquka.com/quiz-backend/"
+          target: "/home/u556728454/domains/rafiquka.com/quizbackend/"
           strip_components: 1
 
       # - name: Run Composer Install on Hostinger
