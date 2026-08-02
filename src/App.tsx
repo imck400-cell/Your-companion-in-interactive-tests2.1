@@ -408,12 +408,16 @@ export default function App() {
     const res = await saveQuiz(newQuiz);
     await loadQuizzes();
 
-    setSaveMessage(
-      res.synced
-        ? 'تم حفظ ومزامنة الاختبار بنجاح مع سحابة Firebase!'
-        : 'تم حفظ الاختبار محلياً في جهازك بدون إنترنت، وستتم المزامنة تلقائياً عند الاتصال بالشبكة.'
-    );
-    setTeacherTab('manage');
+    if (res.success) {
+      setSaveMessage(
+        res.synced
+          ? 'تم حفظ ومزامنة الاختبار بنجاح مع السيرفر المحلي!'
+          : 'تم حفظ الاختبار محلياً في جهازك بدون إنترنت، وستتم المزامنة تلقائياً عند الاتصال بالشبكة.'
+      );
+      setTeacherTab('manage');
+    } else {
+      alert(`فشل حفظ الاختبار: ${res.error || 'خطأ غير معروف'}`);
+    }
     setTimeout(() => setSaveMessage(null), 5000);
   };
 

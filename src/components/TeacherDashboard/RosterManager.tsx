@@ -355,6 +355,9 @@ export const RosterManager: React.FC<RosterManagerProps> = ({
     e.preventDefault();
     if (!addName.trim()) return;
 
+    setImportError(null);
+    setImportSuccess(null);
+
     try {
       const existingSerials = new Set<string>(roster.map((u) => u.serialNumber));
       const rawSerial = generateUniqueSerialNumber(existingSerials);
@@ -384,6 +387,7 @@ export const RosterManager: React.FC<RosterManagerProps> = ({
       setImportSuccess(`تم إضافة (${newUser.name}) بنجاح وتوليد الرقم التسلسلي (${newUser.serialNumber}) والكود (${newUser.code}) ومزامنته فوراً مع قاعدة البيانات السحابية.`);
     } catch (err: any) {
       setImportError(err.message);
+      setImportSuccess(null);
     }
   };
 
