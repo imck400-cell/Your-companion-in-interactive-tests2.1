@@ -15,11 +15,18 @@ class AuthController extends Controller
      */
     public function login(LoginRequest $request): JsonResponse
     {
-        $validated = $request militaryValidation = $request->validated();
+        $validated = $request->validated();
 
         $query = User::query();
 
-        if (!empty($validated['code'])) {
+        if (!empty($validated['role'])) {
+            $query->where('role', $validated['role']);
+        }
+
+        if (!empty($validated['serial_number']) && !empty($validated['code'])) {
+            $query->where('serial_number', $validated['serial_number'])
+                  ->where('code', $validated['code']);
+        } elseif (!empty($validated['code'])) {
             $query->where('code', $validated['code']);
         } elseif (!empty($validated['serial_number'])) {
             $query->where('serial_number', $validated['serial_number']);

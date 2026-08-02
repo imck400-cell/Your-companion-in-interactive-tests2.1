@@ -1,0 +1,18 @@
+{
+  "short_name": "اختبارات تفاعلية",
+  "name": "رفيقك في الاختبارات التفاعلية",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%231d4ed8'/><text x='50%' y='50%' dominant-baseline='central' text-anchor='middle' font-size='50' fill='white'>🎓</text></svg>",
+      "type": "image/svg+xml",
+      "sizes": "192x192 512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0f172a",
+  "theme_color": "#1d4ed8",
+  "display": "standalone",
+  "orientation": "portrait",
+  "dir": "rtl",
+  "lang": "ar"
+}

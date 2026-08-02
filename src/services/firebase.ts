@@ -409,6 +409,8 @@ export async function verifyUserLogin(
     }
   } catch (error: any) {
     console.warn('Auth login error:', error?.response?.data || error.message);
+    const msg = error?.response?.data?.message || 'فشلت عملية الاتصال بالسيرفر لتسجيل الدخول.';
+    throw new Error(msg);
   }
   return null;
 }
@@ -426,11 +428,15 @@ export async function loginWithSerialAndPasscode(
   code: string,
   role?: 'student' | 'teacher'
 ): Promise<{ success: boolean; error?: string; user?: RosterUser | null }> {
-  const user = await verifyUserLogin(serialNumber, code, role);
-  if (user) {
-    return { success: true, user };
+  try {
+    const user = await verifyUserLogin(serialNumber, code, role);
+    if (user) {
+      return { success: true, user };
+    }
+    return { success: false, error: 'لم يتم العثور على سجل المستخدم في النظام.' };
+  } catch (e: any) {
+    return { success: false, error: e.message };
   }
-  return { success: false, error: 'تعذر التحقق من بينات الدخول، يرجى التأكد من الرقم التسلسلي والكود.' };
 }
 
 export async function findUserAndSchoolBySerial(
@@ -484,8 +490,10 @@ export async function saveSingleRosterUserToFirebase(user: RosterUser): Promise<
       branch: user.branch,
       school_name: user.schoolName,
     });
-  } catch (e) {
+  } catch (e: any) {
     console.warn('Save single roster user failed:', e);
+    const msg = e.response?.data?.message || 'فشلت عملية حفظ ومزامنة المستخدم الجديد مع السيرفر. يرجى التحقق من اتصالك.';
+    throw new Error(msg);
   }
 }
 

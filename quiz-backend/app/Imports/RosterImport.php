@@ -44,6 +44,17 @@ class RosterImport implements ToCollection, WithHeadingRow, WithChunkReading, Wi
                 $role = 'student';
             }
 
+            $schoolName = $this->schoolName ?? $row['school_name'] ?? $row['المدرسة'] ?? null;
+            $schoolId = $this->schoolId;
+
+            if (!$schoolId && $schoolName) {
+                $school = \App\Models\School::firstOrCreate(
+                    ['name' => trim($schoolName)],
+                    ['branch' => $row['branch'] ?? $row['الفرع'] ?? 'عام']
+                );
+                $schoolId = $school->id;
+            }
+
             $searchCriteria = [];
             if ($serialNumber) {
                 $searchCriteria['serial_number'] = (string) $serialNumber;
@@ -51,14 +62,14 @@ class RosterImport implements ToCollection, WithHeadingRow, WithChunkReading, Wi
                 $searchCriteria['code'] = (string) $code;
             } else {
                 $searchCriteria['name'] = $name;
-                $searchCriteria['school_id'] = $this->schoolId;
+                $searchCriteria['school_id'] = $schoolId;
             }
 
             User::updateOrCreate(
                 $searchCriteria,
                 [
-                    'school_id' => $this->schoolId,
-                    'school_name' => $this->schoolName ?? $row['school_name'] ?? $row['المدرسة'] ?? null,
+                    'school_id' => $schoolId,
+                    'school_name' => $schoolName,
                     'name' => $name ?? 'مستخدم',
                     'role' => $role,
                     'branch' => $row['branch'] ?? $row['الفرع'] ?? 'عام',

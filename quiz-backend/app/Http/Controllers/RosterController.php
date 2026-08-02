@@ -95,7 +95,21 @@ class RosterController extends Controller
         ]);
 
         $user = $request->user();
-        $validated['school_id'] = $user?->school_id;
+        
+        $schoolId = null;
+        if (!empty($validated['school_name'])) {
+            $school = \App\Models\School::firstOrCreate(
+                ['name' => trim($validated['school_name'])],
+                ['branch' => $validated['branch'] ?? 'عام']
+            );
+            $schoolId = $school->id;
+        }
+
+        if (!$schoolId && $user) {
+            $schoolId = $user->school_id;
+        }
+
+        $validated['school_id'] = $schoolId;
 
         $searchKeys = [];
         if (!empty($validated['serial_number'])) {
@@ -104,7 +118,7 @@ class RosterController extends Controller
             $searchKeys['code'] = $validated['code'];
         } else {
             $searchKeys['name'] = $validated['name'];
-            $searchKeys['school_id'] = $user?->school_id;
+            $searchKeys['school_id'] = $schoolId;
         }
 
         $rosterUser = User::updateOrCreate($searchKeys, $validated);
