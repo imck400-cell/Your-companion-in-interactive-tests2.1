@@ -573,5 +573,17 @@ export async function transferUserToSchool(...args: any[]): Promise<{ success: b
 }
 export async function getSchoolsCount(): Promise<number> { return 1; }
 export async function getRosterCount(role?: string, schoolSlug?: string): Promise<number> { return 0; }
-export async function fetchSchoolsPaginated(...args: any[]): Promise<{ schools: SupervisedSchool[], lastDoc: any }> { return { schools: [], lastDoc: null }; }
-export async function fetchRosterPaginated(...args: any[]): Promise<{ users: RosterUser[], lastDoc: any }> { return { users: [], lastDoc: null }; }
+export async function fetchSchoolsPaginated(...args: any[]): Promise<{ schools: SupervisedSchool[], lastDoc: any }> { 
+  const schools = await fetchAllSchools();
+  return { schools, lastDoc: null };
+}
+export async function fetchRosterPaginated(role?: string, schoolSlug?: string, lastDoc?: any, limitCount: number = 15): Promise<{ users: RosterUser[], lastDoc: any }> {
+  try {
+    const allUsers = await fetchAllRosterUsers(schoolSlug);
+    const filtered = allUsers.filter(u => (!role || u.role === role) && (!schoolSlug || u.schoolName === schoolSlug));
+    return { users: filtered, lastDoc: null };
+  } catch (e) {
+    console.warn('fetchRosterPaginated error:', e);
+    return { users: [], lastDoc: null };
+  }
+}
