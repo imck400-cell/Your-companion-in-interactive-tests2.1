@@ -560,7 +560,17 @@ export async function fetchLicenseLogs(): Promise<LicenseLog[]> { return []; }
 export async function saveSchoolToFirebase(school: SupervisedSchool): Promise<void> {}
 export async function archiveSchoolInFirebase(schoolId: string, schoolName: string): Promise<void> {}
 export async function deleteSchoolFromFirebase(schoolId: string): Promise<void> {}
-export async function fetchAllSchools(): Promise<SupervisedSchool[]> { return []; }
+export async function fetchAllSchools(): Promise<SupervisedSchool[]> {
+  try {
+    const saved = localStorage.getItem('interactive_quiz_schools');
+    if (saved) {
+      return JSON.parse(saved);
+    }
+  } catch (e) {
+    console.warn('Error reading schools from localStorage:', e);
+  }
+  return [];
+}
 export async function upsertRosterUserInFirestore(user: RosterUser): Promise<void> { await saveSingleRosterUserToFirebase(user); }
 export async function migrateOldUsersToSubCollections(progressCb?: any): Promise<{ success: boolean; totalMigrated: number; error: string | null }> {
   if (progressCb) progressCb(100, 100, 'تم التحويل إلى Laravel API');
@@ -580,7 +590,20 @@ export async function fetchSchoolsPaginated(...args: any[]): Promise<{ schools: 
 export async function fetchRosterPaginated(role?: string, schoolSlug?: string, lastDoc?: any, limitCount: number = 15): Promise<{ users: RosterUser[], lastDoc: any }> {
   try {
     const allUsers = await fetchAllRosterUsers(schoolSlug);
-    const filtered = allUsers.filter(u => (!role || u.role === role) && (!schoolSlug || u.schoolName === schoolSlug));
+    let targetSchoolName = schoolSlug;
+    if (schoolSlug) {
+      const schools = await fetchAllSchools();
+      const matchedSchool = schools.find(s => String(s.id) === schoolSlug || getSchoolSlug(s.name) === schoolSlug);
+      if (matchedSchool) {
+        targetSchoolName = matchedSchool.name;
+      }
+    }
+    
+    const filtered = allUsers.filter(u => {
+      const roleMatch = !role || u.role === role;
+      const schoolMatch = !schoolSlug || u.schoolName === targetSchoolName || getSchoolSlug(u.schoolName || '') === schoolSlug;
+      return roleMatch && schoolMatch;
+    });
     return { users: filtered, lastDoc: null };
   } catch (e) {
     console.warn('fetchRosterPaginated error:', e);
