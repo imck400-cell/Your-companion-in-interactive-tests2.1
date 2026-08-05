@@ -201,8 +201,8 @@ export const RosterManager: React.FC<RosterManagerProps> = ({
           },
           async (newUsers, finalJobState) => {
             if (newUsers.length > 0) {
-              onUpdateRoster([...roster, ...newUsers]);
               await syncRosterToFirebase(newUsers);
+              onUpdateRoster([...roster, ...newUsers]);
             }
             
             const duplicates = newUsers.filter((u) => u.isDuplicateReplaced).length;
@@ -327,9 +327,9 @@ export const RosterManager: React.FC<RosterManagerProps> = ({
           return;
         }
 
+        await syncRosterToFirebase(newUsers);
         const updatedRoster = [...roster, ...newUsers];
         onUpdateRoster(updatedRoster);
-        await syncRosterToFirebase(newUsers);
 
         setImportSuccess(
           `تم استيراد (${newUsers.length}) مستخدم بنجاح ومزامنتهم مع قاعدة البيانات السحابية.${
