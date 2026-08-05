@@ -19,7 +19,7 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => ['https://quiz.rafiquka.com', 'http://localhost:5173', 'http://localhost:3000'],
+    'allowed_origins' => ['https://quiz.rafiquka.com'],
 
     'allowed_origins_patterns' => [],
 
