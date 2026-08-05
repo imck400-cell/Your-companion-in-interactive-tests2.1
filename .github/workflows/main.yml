@@ -25,7 +25,7 @@ jobs:
 
       - name: Build Project
         env:
-          VITE_API_BASE_URL: https://quizbackend.rafiquka.co/api/
+          VITE_API_BASE_URL: https://quizbackend.rafiquka.com
         run: npm run build
 
       - name: Sync files via SSH
