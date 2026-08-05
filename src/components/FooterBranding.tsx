@@ -5,7 +5,7 @@ export const FooterBranding: React.FC = () => {
     <footer className="fixed bottom-0 left-0 right-0 h-12 bg-white/95 backdrop-blur-md border-t border-slate-200 flex items-center justify-between px-3 sm:px-8 shadow-lg z-40 dir-rtl">
       {/* Center text */}
       <div className="text-slate-700 text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 sm:gap-3 text-center mx-auto">
-        <span>إعداد المستشار الإداري والتربوي إبراهيم دخان T-1</span>
+        <span>إعداد المستشار الإداري والتربوي إبراهيم دخان T-2</span>
         <span className="text-slate-300 hidden sm:inline">|</span>
         <span className="text-xs text-slate-500 hidden md:inline">منظومة الاختبارات التفاعلية الذكية PWA</span>
       </div>
