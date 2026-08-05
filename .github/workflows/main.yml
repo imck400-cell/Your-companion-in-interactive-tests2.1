@@ -38,6 +38,7 @@ jobs:
           source: "dist/*"
           target: "/home/u556728454/domains/rafiquka.com/public_html/quiz"
           strip_components: 1
+          dot_match: true
 
       - name: Sync Laravel Backend via SSH
         uses: appleboy/scp-action@v0.1.7
@@ -49,6 +50,7 @@ jobs:
           source: "quiz-backend/*"
           target: "/home/u556728454/domains/rafiquka.com/quizbackend/"
           strip_components: 1
+          dot_match: true
 
       # - name: Run Composer Install on Hostinger
       #   uses: appleboy/ssh-action@v1.0.3
