@@ -177,9 +177,22 @@ export async function fetchQuizById(id: string): Promise<QuizMetadata | null> {
   return local || null;
 }
 
+let serverIsDown = false;
+let serverBackoffTimer: any = null;
+
+function handleServerError(e: any) {
+  if (e.response && e.response.status >= 500) {
+    serverIsDown = true;
+    if (serverBackoffTimer) clearTimeout(serverBackoffTimer);
+    serverBackoffTimer = setTimeout(() => {
+      serverIsDown = false;
+    }, 60000); // 1 minute backoff
+  }
+}
+
 export async function fetchAllQuizzes(): Promise<QuizMetadata[]> {
   try {
-    if (navigator.onLine) {
+    if (navigator.onLine && !serverIsDown) {
       const response = await apiClient.get('/quizzes');
       if (response.data && Array.isArray(response.data.data)) {
         const mappedList: QuizMetadata[] = response.data.data.map((q: any) => ({
@@ -221,7 +234,8 @@ export async function fetchAllQuizzes(): Promise<QuizMetadata[]> {
         return mappedList;
       }
     }
-  } catch (e) {
+  } catch (e: any) {
+    handleServerError(e);
     console.warn('API fetchAllQuizzes error, returning local quizzes:', e);
   }
 
@@ -294,7 +308,7 @@ export async function checkGuestAlreadySubmitted(quizId: string, guestDeviceUuid
 
 export async function fetchSubmissionsForQuiz(quizId: string): Promise<Submission[]> {
   try {
-    if (navigator.onLine) {
+    if (navigator.onLine && !serverIsDown) {
       const response = await apiClient.get('/submissions', { params: { quiz_id: quizId } });
       if (response.data && Array.isArray(response.data.data)) {
         return response.data.data.map((s: any) => ({
@@ -307,22 +321,23 @@ export async function fetchSubmissionsForQuiz(quizId: string): Promise<Submissio
           section: s.section,
           schoolName: s.school_name,
           teacherName: s.teacher_name,
-          score: s.score,
-          maxScore: s.max_score,
-          percentage: s.percentage,
-          passed: s.passed,
-          correctCount: s.correct_count,
-          incorrectCount: s.incorrect_count,
-          skippedCount: s.skipped_count,
-          totalTimeSpentSeconds: s.total_time_spent_seconds,
-          answers: s.details || {},
-          submittedAt: s.submitted_at,
+          score: Number(s.score),
+          maxScore: Number(s.max_score),
+          percentage: Number(s.percentage),
+          passed: Boolean(s.passed),
+          correctCount: Number(s.correct_count),
+          incorrectCount: Number(s.incorrect_count),
+          skippedCount: Number(s.skipped_count),
+          totalTimeSpentSeconds: Number(s.total_time_spent_seconds),
+          answers: typeof s.details === 'string' ? JSON.parse(s.details) : s.details,
+          submittedAt: s.created_at || new Date().toISOString(),
           guestDeviceUuid: s.guest_device_uuid,
           synced: true,
         }));
       }
     }
-  } catch (e) {
+  } catch (e: any) {
+    handleServerError(e);
     console.warn('API fetchSubmissionsForQuiz error:', e);
   }
 
@@ -331,10 +346,10 @@ export async function fetchSubmissionsForQuiz(quizId: string): Promise<Submissio
 
 export async function fetchAllSubmissions(): Promise<Submission[]> {
   try {
-    if (navigator.onLine) {
+    if (navigator.onLine && !serverIsDown) {
       const response = await apiClient.get('/submissions');
       if (response.data && Array.isArray(response.data.data)) {
-        return response.data.data.map((s: any) => ({
+        const mappedList: Submission[] = response.data.data.map((s: any) => ({
           id: String(s.id),
           quizId: String(s.quiz_id),
           quizTitle: s.quiz_title,
@@ -344,23 +359,29 @@ export async function fetchAllSubmissions(): Promise<Submission[]> {
           section: s.section,
           schoolName: s.school_name,
           teacherName: s.teacher_name,
-          score: s.score,
-          maxScore: s.max_score,
-          percentage: s.percentage,
-          passed: s.passed,
-          correctCount: s.correct_count,
-          incorrectCount: s.incorrect_count,
-          skippedCount: s.skipped_count,
-          totalTimeSpentSeconds: s.total_time_spent_seconds,
-          answers: s.details || {},
-          submittedAt: s.submitted_at,
+          score: Number(s.score),
+          maxScore: Number(s.max_score),
+          percentage: Number(s.percentage),
+          passed: Boolean(s.passed),
+          correctCount: Number(s.correct_count),
+          incorrectCount: Number(s.incorrect_count),
+          skippedCount: Number(s.skipped_count),
+          totalTimeSpentSeconds: Number(s.total_time_spent_seconds),
+          answers: typeof s.details === 'string' ? JSON.parse(s.details) : s.details,
+          submittedAt: s.created_at || new Date().toISOString(),
           guestDeviceUuid: s.guest_device_uuid,
           synced: true,
         }));
+
+        for (const s of mappedList) {
+          await saveLocalSubmission(s, false);
+        }
+        return mappedList;
       }
     }
-  } catch (e) {
-    console.warn('API fetchAllSubmissions error:', e);
+  } catch (e: any) {
+    handleServerError(e);
+    console.warn('API fetchAllSubmissions error, returning local subs:', e);
   }
 
   return await getAllLocalSubmissions();
@@ -451,30 +472,36 @@ export async function findUserAndSchoolBySerial(
   return null;
 }
 
-export async function fetchAllRosterUsers(schoolName?: string, forceRefresh: boolean = false): Promise<RosterUser[]> {
+export async function fetchAllRosterUsers(): Promise<RosterUser[]> {
   try {
-    if (navigator.onLine) {
+    if (navigator.onLine && !serverIsDown) {
       const response = await apiClient.get('/roster');
       if (response.data && Array.isArray(response.data.data)) {
-        return response.data.data.map((u: any) => ({
+        const mappedList: RosterUser[] = response.data.data.map((u: any) => ({
           id: String(u.id),
           name: u.name,
           role: u.role,
-          serialNumber: u.serial_number,
-          code: u.code,
           schoolName: u.school_name,
           branch: u.branch,
           grade: u.grade,
           section: u.section,
-          email: u.email,
+          serialNumber: u.serial_number,
+          code: u.code,
           createdAt: u.created_at || new Date().toISOString(),
+          synced: true,
         }));
+
+        for (const u of mappedList) {
+          await saveLocalRosterUser(u, false);
+        }
+        return mappedList;
       }
     }
-  } catch (e) {
-    console.warn('Fetch roster error:', e);
+  } catch (e: any) {
+    handleServerError(e);
+    console.warn('API fetchAllRosterUsers error, returning local roster:', e);
   }
-  return [];
+  return await getLocalRosterUsers();
 }
 
 export async function saveSingleRosterUserToFirebase(user: RosterUser): Promise<void> {

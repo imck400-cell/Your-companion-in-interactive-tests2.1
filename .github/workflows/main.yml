@@ -52,13 +52,13 @@ jobs:
           strip_components: 1
           dot_match: true
 
-      # - name: Run Composer Install on Hostinger
-      #   uses: appleboy/ssh-action@v1.0.3
-      #   with:
-      #     host: ${{ secrets.SSH_HOST }}
-      #     username: ${{ secrets.SSH_USERNAME }}
-      #     port: ${{ secrets.SSH_PORT }}
-      #     password: ${{ secrets.SSH_PASSWORD }}
-      #     script: |
-      #       cd /home/u556728454/domains/rafiquka.com/backend/
-      #       composer install --no-dev --optimize-autoloader
+      - name: Run Permissions and Cache Clear on Hostinger
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          port: ${{ secrets.SSH_PORT }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          script: |
+            cd /home/u556728454/domains/rafiquka.com/quizbackend/
+            chmod -R 775 storage bootstrap/cache

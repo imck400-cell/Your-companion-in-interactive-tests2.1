@@ -56,3 +56,12 @@ Route::middleware(['throttle:60,1'])->group(function () {
         Route::get('/analytics/general-stats', [AnalyticsController::class, 'generalStats']);
     });
 });
+
+Route::get('/test-db', function () {
+    try {
+        \Illuminate\Support\Facades\DB::connection()->getPdo();
+        return 'Database connection is OK';
+    } catch (\Exception $e) {
+        return 'DB Error: ' . $e->getMessage();
+    }
+});
