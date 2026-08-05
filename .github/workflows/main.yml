@@ -24,6 +24,10 @@ jobs:
         run: npm ci
 
       - name: Build Project
+        env:
+          # قم بتغيير هذا الرابط إلى رابط السب-دومين الخاص بالباك اند إذا كان لديك واحد
+          # مثال: VITE_API_BASE_URL: https://api.quiz.rafiquka.com
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
         run: npm run build
 
       - name: Sync files via SSH
