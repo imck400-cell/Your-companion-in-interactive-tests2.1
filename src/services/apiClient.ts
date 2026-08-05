@@ -1,8 +1,15 @@
 import axios from 'axios';
 
+let rawBaseUrl = (import.meta as any).env?.VITE_API_BASE_URL || '/api';
+
+// Ensure the baseURL ends with /api (fixes 404 errors if VITE_API_BASE_URL is set to just the domain)
+if (rawBaseUrl && !rawBaseUrl.endsWith('/api') && !rawBaseUrl.endsWith('/api/')) {
+  rawBaseUrl = rawBaseUrl.replace(/\/$/, '') + '/api';
+}
+
 // Create central Axios instance for Laravel Sanctum API
 export const apiClient = axios.create({
-  baseURL: (import.meta as any).env?.VITE_API_BASE_URL || '/api',
+  baseURL: rawBaseUrl,
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
