@@ -184,10 +184,27 @@ export const StudentQuizContainer: React.FC<StudentQuizContainerProps> = ({
     setAnswers((prev) => ({
       ...prev,
       [currentQuestion.id]: {
+        ...(prev[currentQuestion.id] || {}),
         questionId: currentQuestion.id,
         answer: ans,
         skipped: false,
         timeSpentSeconds: questionTimeSpent[currentQuestion.id] || 0,
+      },
+    }));
+  };
+
+  const handleConfirmAnswer = () => {
+    if (!currentQuestion) return;
+    setAnswers((prev) => ({
+      ...prev,
+      [currentQuestion.id]: {
+        ...(prev[currentQuestion.id] || {
+          questionId: currentQuestion.id,
+          answer: null,
+          skipped: false,
+          timeSpentSeconds: questionTimeSpent[currentQuestion.id] || 0,
+        }),
+        isConfirmed: true,
       },
     }));
   };
@@ -611,6 +628,8 @@ export const StudentQuizContainer: React.FC<StudentQuizContainerProps> = ({
             isAnswerSubmitted={!!answers[currentQuestion.id]}
             questionTimeSpentSeconds={questionTimeSpent[currentQuestion.id] || 0}
             allowAnswerChange={quiz.allowAnswerChange}
+            isConfirmed={answers[currentQuestion.id]?.isConfirmed}
+            onConfirmAnswer={handleConfirmAnswer}
           />
         </motion.div>
       </AnimatePresence>

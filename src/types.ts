@@ -153,6 +153,7 @@ export interface StudentAnswer {
   earnedPoints?: number;
   skipped?: boolean;
   timeSpentSeconds?: number;
+  isConfirmed?: boolean;
 }
 
 export interface SubmissionDetail {

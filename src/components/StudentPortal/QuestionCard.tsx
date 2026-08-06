@@ -13,6 +13,8 @@ interface QuestionCardProps {
   isAnswerSubmitted?: boolean;
   questionTimeSpentSeconds?: number;
   allowAnswerChange?: boolean;
+  isConfirmed?: boolean;
+  onConfirmAnswer?: () => void;
 }
 
 export const QuestionCard: React.FC<QuestionCardProps> = ({
@@ -25,6 +27,8 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
   isAnswerSubmitted = false,
   questionTimeSpentSeconds = 0,
   allowAnswerChange = false,
+  isConfirmed = false,
+  onConfirmAnswer,
 }) => {
   // Matching local state
   const [matchingState, setMatchingState] = useState<{ [left: string]: string }>(currentAnswer || {});
@@ -49,7 +53,14 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
     return !!currentAnswer;
   })();
 
-  const isLocked = !allowAnswerChange && isAnswerGiven;
+  const isTextBased = question.type === 'essay' || question.type === 'explain' || question.type === 'answer' || question.type === 'fill_in' || question.type === 'drawing';
+
+  const isLocked = (() => {
+    if (isTextBased) {
+      return !allowAnswerChange && isConfirmed;
+    }
+    return !allowAnswerChange && isAnswerGiven;
+  })();
 
   useEffect(() => {
     if (question.type === 'matching' && currentAnswer) {
@@ -185,7 +196,7 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
 
       {/* 3. Fill in the blank */}
       {question.type === 'fill_in' && (
-        <div>
+        <div className="space-y-3">
           <label className="block text-xs font-bold text-slate-600 mb-2">أدخل الكلمة أو العبارة الناقصة:</label>
           <input
             type="text"
@@ -198,6 +209,30 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
               isLocked ? 'bg-slate-100/90 cursor-not-allowed' : ''
             }`}
           />
+          {!isLocked && (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                disabled={!isAnswerGiven}
+                onClick={() => {
+                  if (onConfirmAnswer) {
+                    onConfirmAnswer();
+                    if (allowAnswerChange) {
+                      alert('تم اعتماد إجابتك! (ملاحظة: المعلم يسمح بتعديل الإجابات، لذا يمكنك العودة وتعديلها لاحقاً قبل التسليم النهائي)');
+                    }
+                  }
+                }}
+                className={`px-6 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all ${
+                  isAnswerGiven
+                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-md cursor-pointer'
+                    : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                }`}
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                اعتماد الإجابة
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -266,19 +301,43 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
 
       {/* 6. Drawing Canvas (ارسم) */}
       {question.type === 'drawing' && (
-        <div>
+        <div className="space-y-3">
           <p className="text-xs font-bold text-slate-600 mb-2">استخدم القلم الملوّن واللوحة أدناه للتعبير بالرسم:</p>
           <DrawingCanvas
             readOnly={isLocked}
             initialDataUrl={currentAnswer}
             onChange={(dataUrl) => !isLocked && onAnswerChange(dataUrl)}
           />
+          {!isLocked && (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                disabled={!isAnswerGiven}
+                onClick={() => {
+                  if (onConfirmAnswer) {
+                    onConfirmAnswer();
+                    if (allowAnswerChange) {
+                      alert('تم اعتماد إجابتك! (ملاحظة: المعلم يسمح بتعديل الإجابات، لذا يمكنك العودة وتعديلها لاحقاً قبل التسليم النهائي)');
+                    }
+                  }
+                }}
+                className={`px-6 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all ${
+                  isAnswerGiven
+                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-md cursor-pointer'
+                    : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                }`}
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                اعتماد اللوحة
+              </button>
+            </div>
+          )}
         </div>
       )}
 
       {/* 7. Essay / Explain / Direct Answer */}
-      {(question.type === 'essay' || question.type === 'explain' || question.type === 'answer') && (
-        <div>
+      {isTextBased && (
+        <div className="space-y-3">
           <label className="block text-xs font-bold text-slate-600 mb-2">اكتب إجابتك الشاملة هنا:</label>
           <textarea
             rows={5}
@@ -291,6 +350,30 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
               isLocked ? 'bg-slate-100/90 cursor-not-allowed' : ''
             }`}
           />
+          {!isLocked && (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                disabled={!isAnswerGiven}
+                onClick={() => {
+                  if (onConfirmAnswer) {
+                    onConfirmAnswer();
+                    if (allowAnswerChange) {
+                      alert('تم اعتماد إجابتك! (ملاحظة: المعلم يسمح بتعديل الإجابات، لذا يمكنك العودة وتعديلها لاحقاً قبل التسليم النهائي)');
+                    }
+                  }
+                }}
+                className={`px-6 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all ${
+                  isAnswerGiven
+                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-md cursor-pointer'
+                    : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                }`}
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                اعتماد الإجابة
+              </button>
+            </div>
+          )}
         </div>
       )}
 
