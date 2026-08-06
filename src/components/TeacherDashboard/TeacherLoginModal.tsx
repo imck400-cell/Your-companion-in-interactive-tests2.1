@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { TeacherProfile, RosterUser } from '../../types';
 import { School, User, Building, Calendar, Key, Lock, Mail, LogIn, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { validateAndAcquireSessionForTeacher } from '../../services/sessionManager';
-import { normalizeDigits, verifyTeacherLogin, loginWithSerialAndPasscode, findUserAndSchoolBySerial, saveSingleRosterUserToFirebase } from '../../services/firebase';
+import apiClient from '../../services/apiClient';
+import { normalizeDigits } from '../../services/firebase';
 
 interface TeacherLoginModalProps {
   isOpen: boolean;
@@ -31,6 +32,7 @@ export const TeacherLoginModal: React.FC<TeacherLoginModalProps> = ({
   const [sessionError, setSessionError] = useState<string | null>(null);
   
   const [matchedTeacher, setMatchedTeacher] = useState<RosterUser | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Generate Automatic Hijri / Gregorian Academic Year string
   useEffect(() => {
@@ -50,9 +52,8 @@ export const TeacherLoginModal: React.FC<TeacherLoginModalProps> = ({
     setAcademicYear(yearFormatted);
   }, []);
 
-  // Look for match when serial and code changes
+  // Look for match when serial and code changes (Local Roster Cache Only - NO API CALLS ON KEYSTROKES)
   useEffect(() => {
-    let isSubscribed = true;
     const normSerial = normalizeDigits(serialNumber);
     const normCode = normalizeDigits(code);
 
@@ -70,22 +71,10 @@ export const TeacherLoginModal: React.FC<TeacherLoginModalProps> = ({
         setSchoolName(localFound.schoolName || '');
         setBranch(localFound.branch || 'عام');
       } else {
-        // 2. Query Firestore directly if not yet present in local state
-        verifyTeacherLogin(normSerial, normCode).then((remoteFound) => {
-          if (isSubscribed) {
-            if (remoteFound) {
-              setMatchedTeacher(remoteFound);
-              setTeacherName(remoteFound.name);
-              setSchoolName(remoteFound.schoolName || '');
-              setBranch(remoteFound.branch || 'عام');
-            } else {
-              setMatchedTeacher(null);
-              setTeacherName('');
-              setSchoolName('');
-              setBranch('');
-            }
-          }
-        });
+        setMatchedTeacher(null);
+        setTeacherName('');
+        setSchoolName('');
+        setBranch('');
       }
     } else {
       setMatchedTeacher(null);
@@ -93,10 +82,6 @@ export const TeacherLoginModal: React.FC<TeacherLoginModalProps> = ({
       setSchoolName('');
       setBranch('');
     }
-
-    return () => {
-      isSubscribed = false;
-    };
   }, [serialNumber, code, roster]);
 
   if (!isOpen) return null;
@@ -108,64 +93,66 @@ export const TeacherLoginModal: React.FC<TeacherLoginModalProps> = ({
     const normSerial = normalizeDigits(serialNumber);
     const normCode = normalizeDigits(code);
 
-    if (!matchedTeacher && (!normSerial || !normCode)) {
-      alert('الرقم التسلسلي أو الكود غير صحيح، أو المعلم/المستخدم غير مسجل في النظام.');
+    if (!normSerial || !normCode) {
+      alert('الرقم التسلسلي أو الكود غير صحيح.');
       return;
     }
 
-    // 1. Firebase Auth Trick (Serial + Passcode) with Session Persistence
-    let effectiveTeacher = matchedTeacher;
-    const authRes = await loginWithSerialAndPasscode(serialNumber, code);
-    
-    if (authRes.success) {
-      // 2. Discover School & User via Collection Group Query across /schools/{school_id}/users
-      const discovered = await findUserAndSchoolBySerial(serialNumber);
-      if (discovered?.user) {
-        effectiveTeacher = discovered.user;
-      }
-    } else if (!matchedTeacher) {
-      setSessionError(authRes.error || 'فشلت المصادقة السحابية باستخدام الرقم التسلسلي والكود.');
-      return;
-    }
+    setIsLoading(true);
 
-    if (!effectiveTeacher) {
-      alert('لم يتم العثور على سجل المستخدم في المدارس المسجلة.');
-      return;
-    }
-
-    const rawProfile: TeacherProfile = {
-      ...currentProfile,
-      schoolName: (effectiveTeacher.schoolName || schoolName).trim(),
-      branch: (effectiveTeacher.branch || branch).trim() || 'عام',
-      academicYear: academicYear,
-      teacherName: (effectiveTeacher.name || teacherName).trim(),
-      teacherCode: code.trim(),
-      serialNumber: serialNumber.trim(),
-      email: email.trim() || undefined,
-      grade: effectiveTeacher.grade || 'جميع الصفوف',
-      section: effectiveTeacher.section || 'جميع الشعب',
-      role: effectiveTeacher.role || 'teacher',
-    };
-
-    // Single Active Session Check for Teachers
-    const sessionRes = validateAndAcquireSessionForTeacher(rawProfile);
-    if (!sessionRes.allowed) {
-      setSessionError(sessionRes.errorMessage || 'تعذر تسجيل الدخول.');
-      return;
-    }
-
-    const activeProfile = sessionRes.updatedTeacher || rawProfile;
-    localStorage.setItem('interactive_quiz_teacher_profile', JSON.stringify(activeProfile));
-
-    if (effectiveTeacher) {
-      await saveSingleRosterUserToFirebase({
-        ...effectiveTeacher,
-        active_session_id: activeProfile.active_session_id || '',
-        last_activity_at: activeProfile.last_activity_at || Date.now(),
+    try {
+      // Direct Laravel API Call (Fast, Single Request)
+      const response = await apiClient.post('/auth/login', {
+        serial_number: normSerial,
+        code: normCode,
+        role: 'teacher',
       });
-    }
 
-    onLoginSuccess(activeProfile);
+      if (response.data && response.data.data) {
+        const { token, user } = response.data.data;
+        
+        // Save tokens immediately
+        if (token) {
+          localStorage.setItem('sanctum_token', token);
+          localStorage.setItem('auth_token', token);
+        }
+
+        const rawProfile: TeacherProfile = {
+          ...currentProfile,
+          schoolName: (user.school_name || schoolName).trim(),
+          branch: (user.branch || branch).trim() || 'عام',
+          academicYear: academicYear,
+          teacherName: (user.name || teacherName).trim(),
+          teacherCode: user.code,
+          serialNumber: user.serial_number,
+          email: email.trim() || undefined,
+          grade: user.grade || 'جميع الصفوف',
+          section: user.section || 'جميع الشعب',
+          role: user.role || 'teacher',
+        };
+
+        // Single Active Session Check for Teachers
+        const sessionRes = validateAndAcquireSessionForTeacher(rawProfile);
+        if (!sessionRes.allowed) {
+          setSessionError(sessionRes.errorMessage || 'تعذر تسجيل الدخول بسبب الحماية من الدخول المزدوج.');
+          setIsLoading(false);
+          return;
+        }
+
+        const activeProfile = sessionRes.updatedTeacher || rawProfile;
+        localStorage.setItem('interactive_quiz_teacher_profile', JSON.stringify(activeProfile));
+
+        // Immediate redirect to dashboard
+        onLoginSuccess(activeProfile);
+      } else {
+        setSessionError('استجابة غير صالحة من السيرفر.');
+      }
+    } catch (error: any) {
+      console.warn('Login error:', error?.response?.data || error.message);
+      setSessionError(error?.response?.data?.message || 'فشلت عملية التحقق. تأكد من صحة البيانات أو اتصالك بالإنترنت.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -339,15 +326,22 @@ export const TeacherLoginModal: React.FC<TeacherLoginModalProps> = ({
           <div className="pt-2 flex items-center gap-2">
             <button
               type="submit"
-              disabled={!matchedTeacher}
-              className={`flex-1 py-2.5 px-4 text-white font-black rounded-xl text-xs shadow-md flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                matchedTeacher 
-                  ? 'bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 hover:shadow-indigo-200' 
-                  : 'bg-slate-400 cursor-not-allowed'
+              disabled={isLoading}
+              className={`w-full sm:w-auto px-8 py-3 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-black text-sm rounded-2xl flex items-center justify-center gap-2 shadow-lg transition-all ${
+                isLoading ? 'opacity-70 cursor-wait' : 'shadow-indigo-200 cursor-pointer'
               }`}
             >
-              <LogIn className="w-4 h-4" />
-              الدخول للنظام
+              {isLoading ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin shrink-0" />
+                  جاري الدخول...
+                </>
+              ) : (
+                <>
+                  <LogIn className="w-5 h-5" />
+                  تسجيل الدخول
+                </>
+              )}
             </button>
             {onClose && (
               <button
