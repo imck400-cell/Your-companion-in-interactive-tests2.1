@@ -18,39 +18,75 @@ export const SmartTextParserEditor: React.FC<SmartTextParserEditorProps> = ({
 
   // States for Prompt Generator
   const [showAiModal, setShowAiModal] = useState(false);
-  const [mcqCount, setMcqCount] = useState(3);
-  const [tfCount, setTfCount] = useState(2);
-  const [shortCount, setShortCount] = useState(1);
-  const [matchingCount, setMatchingCount] = useState(0);
-  const [referenceText, setReferenceText] = useState('');
+  const [tfCount, setTfCount] = useState<number | ''>(0);
+  const [mcqCount, setMcqCount] = useState<number | ''>(0);
+  const [completeCount, setCompleteCount] = useState<number | ''>(0);
+  const [explainCount, setExplainCount] = useState<number | ''>(0);
+  const [matchingCount, setMatchingCount] = useState<number | ''>(0);
+  const [categorizeCount, setCategorizeCount] = useState<number | ''>(0);
+  const [drawCount, setDrawCount] = useState<number | ''>(0);
+  const [directCount, setDirectCount] = useState<number | ''>(0);
   const [generatedPrompt, setGeneratedPrompt] = useState('');
 
   // States for Preview Table
   const [showPreview, setShowPreview] = useState(false);
 
   const generatePrompt = () => {
-    const promptText = `اريد منك أن تنشئ لي أسئلة مشتملة على الشروط المطلوبة هنا مع التوضيح لكل إجابة وبحيث يتم تحديد عدد الأسئلة أيضا ونوع الأسئلة وفي كل نوع كم عدد الأسئلة فيه.
+    let promptText = `دورك:
+أنت خبير متمرس في التصميم التعليمي والقياس والتقويم التربوي.
 
-الشروط الأساسية لكتابة الأسئلة (يجب الالتزام بها حرفياً):
-1. بداية السؤال: يجب أن يبدأ السطر بـ [س] أو س: متبوعاً بنص السؤال.
-2. نوع السؤال والدرجة: يجب وضع نوع السؤال والدرجة في نفس سطر السؤال بين أقواس مربعة. الأنواع المسموحة هي:
-   [نوع: اختيارات]، [نوع: صواب_خطأ]، [نوع: أكمل]، [نوع: صل]، [نوع: صنف]، [نوع: ارسم]، [نوع: علل]، [نوع: مقالي]، [نوع: أجب].
-3. الإجابة الصحيحة للخيارات والصواب/الخطأ: ضع علامة النجمة (*) في بداية السطر المخصص للإجابة الصحيحة، وشرطة (-) للخيارات الخاطئة.
-4. الإجابة لأسئلة (أكمل، علل، أجب): ضع الإجابة في سطر منفصل يبدأ بـ [إجابة: النص].
-5. التوضيح أو التغذية الراجعة: ضع التوضيح الخاص بالسؤال في سطر منفصل يبدأ بـ [توضيح: الشرح].
-6. أسئلة التوصيل (صل): اكتب الخيارات بهذا الشكل:
-   [صل] الكلمة 1 = الكلمة 2
-7. أسئلة التصنيف: اكتب التصنيفات بهذا الشكل:
-   [تصنيف] الفئة : العنصر
+المهمة الأساسية:
+اقرأ الملف المرفق أو النص المقدم بعناية تامة. مطلوب منك استخراج أهم المعلومات وتحويلها إلى اختبار شامل ومتنوع. يجب أن تكون مخرجاتك عبارة عن نص خام (Raw Text) فقط، ولا تقم بإنشاء روابط تفاعلية بأي شكل من الأشكال.
 
-أرجو بناء الأسئلة وفقاً للمعطيات التالية:
-- عدد أسئلة الاختيارات المتعددة: ${mcqCount}
-- عدد أسئلة الصواب والخطأ: ${tfCount}
-- عدد أسئلة المقالي/علل/أكمل: ${shortCount}
-- عدد أسئلة التوصيل/التصنيف: ${matchingCount}
+معايير صياغة الأسئلة (الجانب المعرفي):
+- يجب أن تقيس الأسئلة مهارات التفكير العليا: الفهم، التحليل، الاستنتاج، التفكير الناقد، وسرعة البديهة.
+- تجنب أسئلة الحفظ والتلقين المباشر تماماً، وذلك لتعزيز بيئة التعلم النشط.
+- تنبيه حاسم (في حال وجود أسئلة جاهزة): إذا تضمن الملف المرفق أسئلة جاهزة مسبقاً، يجب عليك اعتمادها كما هي دون تغيير أو تعديل في صياغتها، ولكن يُطلب منك فقط إعادة تنسيقها هيكلياً لتطابق "شروط التنسيق البرمجي" المذكورة أدناه.
 
-النص المرجعي أو الدرس الذي ستستنبط منه الأسئلة هو:
-${referenceText}`;
+شروط التنسيق البرمجي (إلزامية، صارمة، وغير قابلة للتفاوض):
+يجب إخراج الأسئلة بنسق نصي محدد جداً ليتم قراءته عبر محرك برمجي (Regex Parser). ممنوع استخدام أي تنسيقات (مثل: الجداول، الخط العريض Bold، القوائم النقطية، أو أي تنسيقات Markdown). استخدم النص الخام فقط وفق القواعد التالية حرفياً:
+
+- بداية السؤال: يجب أن يبدأ كل سؤال بالرمز [س] يتبعه نص السؤال.
+- الخيار الصحيح: يجب أن يسبقه علامة النجمة * مباشرة (بدون مسافة).
+- الخيارات الخاطئة: يجب أن يسبقها علامة الشرطة - مباشرة (بدون مسافة).
+- التوضيح (للإجابة الصحيحة): يتم وضع التوضيح بعد إجابة كل سؤال في سطر مستقل، ويوضع بين معكوفتين بهذا الشكل تماماً: [توضيح : ]. (تأكد أن كلمة "توضيح" تأتي بعد المعكوفة الأولى مباشرة دون مسافات).
+
+أمثلة تطبيقية للتنسيق المطلوب (يجب محاكاتها حرفياً):
+1. لأسئلة الاختيار من متعدد:
+[س] ما هي العاصمة الرسمية لليمن؟
+-عدن
+-تعز
+*صنعاء
+-الحديدة
+[توضيح : صنعاء هي العاصمة السياسية والتاريخية للجمهورية اليمنية.]
+
+2. لأسئلة الصواب والخطأ:
+[س] تشرق الشمس من جهة الغرب؟
+-صواب
+*خطأ
+[توضيح : تشرق الشمس دائماً من جهة الشرق بسبب دوران الأرض حول محورها من الغرب إلى الشرق.]
+
+3. لأسئلة (أكمل، علل، مقالي، مصطلحات):
+(ابدأ الإجابة بـ [نص] ثم علامة * وإذا كان هناك عدة إجابات محتملة افصل بينها بـ / ثم أضف التوضيح في النهاية).
+[س] علل: حدوث ظاهرة الفصول الأربعة؟
+[نص] *بسبب ميل محور الأرض / دوران الأرض حول الشمس / ميل محور الأرض أثناء دورانها
+[توضيح : دوران الأرض حول الشمس مع ميل محورها يسبب اختلاف زاوية سقوط أشعة الشمس على الأرض.]
+
+التعليمات النهائية: التزم بهذا النسق حرفياً في كل سؤال يتم توليده أو إعادة صياغته، ولا تضف أي مقدمات أو خاتمات خارج هذا النطاق.`;
+
+    const requiredQuestions: string[] = [];
+    if (Number(mcqCount) > 0) requiredQuestions.push(`- عدد أسئلة الاختيار من متعدد: ${mcqCount}`);
+    if (Number(tfCount) > 0) requiredQuestions.push(`- عدد أسئلة الصواب والخطأ: ${tfCount}`);
+    if (Number(completeCount) > 0) requiredQuestions.push(`- عدد أسئلة أكمل الفراغ: ${completeCount}`);
+    if (Number(explainCount) > 0) requiredQuestions.push(`- عدد أسئلة التعليل والتفسير: ${explainCount}`);
+    if (Number(matchingCount) > 0) requiredQuestions.push(`- عدد أسئلة التوصيل: ${matchingCount}`);
+    if (Number(categorizeCount) > 0) requiredQuestions.push(`- عدد أسئلة صنف: ${categorizeCount}`);
+    if (Number(drawCount) > 0) requiredQuestions.push(`- عدد أسئلة ارسم: ${drawCount}`);
+    if (Number(directCount) > 0) requiredQuestions.push(`- عدد أسئلة سؤال مباشر: ${directCount}`);
+
+    if (requiredQuestions.length > 0) {
+      promptText += `\n\nبناءً على المعطيات التالية، قم بتوليد الأسئلة:\n` + requiredQuestions.join('\n');
+    }
 
     setGeneratedPrompt(promptText);
   };
@@ -369,61 +405,97 @@ ${referenceText}`;
 
               {/* Counts */}
               <div>
-                <h3 className="font-bold text-slate-700 mb-3 text-sm">توزيع عدد الأسئلة المطلوبة:</h3>
+                <h3 className="font-bold text-slate-700 mb-3 text-sm">توزيع عدد الأسئلة المطلوبة (اضغط على الحقل لتعديل العدد مباشرة):</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">الاختيارات المتعددة</label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={mcqCount}
-                      onChange={(e) => setMcqCount(parseInt(e.target.value) || 0)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-200 focus:border-purple-500 outline-none transition-all font-mono"
-                    />
-                  </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1">الصواب والخطأ</label>
                     <input
                       type="number"
                       min={0}
                       value={tfCount}
-                      onChange={(e) => setTfCount(parseInt(e.target.value) || 0)}
+                      onChange={(e) => setTfCount(e.target.value === '' ? '' : parseInt(e.target.value) || 0)}
+                      onFocus={(e) => e.target.select()}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-200 focus:border-purple-500 outline-none transition-all font-mono"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">المقالي / علل / أكمل</label>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">الاختيار من متعدد</label>
                     <input
                       type="number"
                       min={0}
-                      value={shortCount}
-                      onChange={(e) => setShortCount(parseInt(e.target.value) || 0)}
+                      value={mcqCount}
+                      onChange={(e) => setMcqCount(e.target.value === '' ? '' : parseInt(e.target.value) || 0)}
+                      onFocus={(e) => e.target.select()}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-200 focus:border-purple-500 outline-none transition-all font-mono"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">توصيل / تصنيف</label>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">أكمل الفراغ</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={completeCount}
+                      onChange={(e) => setCompleteCount(e.target.value === '' ? '' : parseInt(e.target.value) || 0)}
+                      onFocus={(e) => e.target.select()}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-200 focus:border-purple-500 outline-none transition-all font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">علل</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={explainCount}
+                      onChange={(e) => setExplainCount(e.target.value === '' ? '' : parseInt(e.target.value) || 0)}
+                      onFocus={(e) => e.target.select()}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-200 focus:border-purple-500 outline-none transition-all font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">التوصيل</label>
                     <input
                       type="number"
                       min={0}
                       value={matchingCount}
-                      onChange={(e) => setMatchingCount(parseInt(e.target.value) || 0)}
+                      onChange={(e) => setMatchingCount(e.target.value === '' ? '' : parseInt(e.target.value) || 0)}
+                      onFocus={(e) => e.target.select()}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-200 focus:border-purple-500 outline-none transition-all font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">صنف</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={categorizeCount}
+                      onChange={(e) => setCategorizeCount(e.target.value === '' ? '' : parseInt(e.target.value) || 0)}
+                      onFocus={(e) => e.target.select()}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-200 focus:border-purple-500 outline-none transition-all font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">ارسم</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={drawCount}
+                      onChange={(e) => setDrawCount(e.target.value === '' ? '' : parseInt(e.target.value) || 0)}
+                      onFocus={(e) => e.target.select()}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-200 focus:border-purple-500 outline-none transition-all font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">سؤال مباشر</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={directCount}
+                      onChange={(e) => setDirectCount(e.target.value === '' ? '' : parseInt(e.target.value) || 0)}
+                      onFocus={(e) => e.target.select()}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-200 focus:border-purple-500 outline-none transition-all font-mono"
                     />
                   </div>
                 </div>
-              </div>
-
-              {/* Reference Text */}
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">الصق نص الدرس أو المحتوى المرجعي هنا:</label>
-                <textarea
-                  rows={4}
-                  value={referenceText}
-                  onChange={(e) => setReferenceText(e.target.value)}
-                  placeholder="أدخل نص الدرس، القصة، أو المعلومات التي تريد استنباط الأسئلة منها..."
-                  className="w-full p-4 rounded-xl border border-slate-300 focus:border-purple-500 focus:ring-2 focus:ring-purple-100 outline-none text-sm text-slate-800 transition-all bg-slate-50"
-                />
               </div>
 
               <div className="flex justify-center">
