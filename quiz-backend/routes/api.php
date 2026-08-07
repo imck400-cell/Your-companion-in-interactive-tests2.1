@@ -50,10 +50,17 @@ Route::middleware(['throttle:60,1'])->group(function () {
         Route::get('/roster', [RosterController::class, 'index']);
         Route::post('/roster/import', [RosterController::class, 'importExcel']);
         Route::post('/roster/single', [RosterController::class, 'storeSingle']);
+        Route::delete('/roster/{id}', [RosterController::class, 'destroy']);
+
+        // Admin Routes
+        Route::get('/admin/submissions/all', [SubmissionController::class, 'index']);
+        Route::get('/admin/users', [RosterController::class, 'index']);
+        Route::post('/admin/users', [RosterController::class, 'storeSingle']);
+        Route::delete('/admin/users/{id}', [RosterController::class, 'destroy']);
 
         // Analytics & Top Performance Endpoints
-        Route::get('/analytics/top-performance', [AnalyticsController::class, 'topPerformance']);
-        Route::get('/analytics/general-stats', [AnalyticsController::class, 'generalStats']);
+        // Route::get('/analytics/top-performance', [AnalyticsController::class, 'topPerformance']);
+        // Route::get('/analytics/general-stats', [AnalyticsController::class, 'generalStats']);
     });
 });
 
