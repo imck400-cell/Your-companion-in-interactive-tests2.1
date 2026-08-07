@@ -117,4 +117,41 @@ class AuthController extends Controller
             'message' => 'تم تسجيل الخروج بنجاح'
         ]);
     }
+
+    /**
+     * Guest Login for 30-day trial.
+     */
+    public function guestLogin(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255'
+        ]);
+
+        $user = User::create([
+            'name' => $validated['name'],
+            'email' => 'guest_' . uniqid() . '@sandbox.local',
+            'password' => Hash::make(uniqid()), // Random password
+            'role' => 'guest_teacher',
+            'school_id' => null, // Isolated from other schools
+            'serial_number' => 'GUEST' . rand(1000, 9999),
+            'code' => rand(1000000, 9999999)
+        ]);
+
+        $token = $user->createToken('guest_token', ['*'], now()->addDays(30))->plainTextToken;
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'تم تسجيل دخول الضيف بنجاح',
+            'data' => [
+                'token' => $token,
+                'user' => [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'role' => $user->role,
+                    'school_id' => $user->school_id,
+                    'created_at' => $user->created_at,
+                ]
+            ]
+        ]);
+    }
 }

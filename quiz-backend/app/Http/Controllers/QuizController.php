@@ -58,6 +58,20 @@ class QuizController extends Controller
         $quizData['school_id'] = $user->school_id ?? $request->input('school_id');
         $quizData['teacher_id'] = $user->id;
 
+        // Guest Teacher daily limit check
+        if ($user->role === 'guest_teacher') {
+            $todayQuizzes = Quiz::where('teacher_id', $user->id)
+                ->whereDate('created_at', today())
+                ->count();
+            
+            if ($todayQuizzes >= 3) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'لقد استنفدت الحد اليومي المسموح به (3 اختبارات). عد غداً أو اشترك معنا.'
+                ], 403);
+            }
+        }
+
         $quiz = DB::transaction(function () use ($quizData, $validated) {
             $createdQuiz = Quiz::create($quizData);
 

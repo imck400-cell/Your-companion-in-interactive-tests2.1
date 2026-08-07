@@ -33,6 +33,8 @@ export const TeacherLoginModal: React.FC<TeacherLoginModalProps> = ({
   
   const [matchedTeacher, setMatchedTeacher] = useState<RosterUser | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isGuestMode, setIsGuestMode] = useState(false);
+  const [guestName, setGuestName] = useState('');
 
   // Generate Automatic Hijri / Gregorian Academic Year string
   useEffect(() => {
@@ -150,6 +152,52 @@ export const TeacherLoginModal: React.FC<TeacherLoginModalProps> = ({
     } catch (error: any) {
       console.warn('Login error:', error?.response?.data || error.message);
       setSessionError(error?.response?.data?.message || 'فشلت عملية التحقق. تأكد من صحة البيانات أو اتصالك بالإنترنت.');
+      setIsLoading(false);
+    }
+  };
+
+  const handleGuestSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSessionError(null);
+
+    if (!guestName.trim()) {
+      alert('الرجاء إدخال الاسم.');
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const response = await apiClient.post('/guest-login', {
+        name: guestName.trim(),
+      });
+
+      if (response.data && response.data.data) {
+        const { token, user } = response.data.data;
+        
+        if (token) {
+          localStorage.setItem('sanctum_token', token);
+          localStorage.setItem('auth_token', token);
+        }
+
+        const activeProfile: TeacherProfile = {
+          teacherName: user.name,
+          role: 'guest_teacher',
+          schoolName: 'تجربة مؤقتة (ضيف)',
+          branch: 'عام',
+          academicYear: academicYear,
+          teacherCode: user.code || '',
+          serialNumber: user.serial_number || '',
+        };
+
+        localStorage.setItem('interactive_quiz_teacher_profile', JSON.stringify(activeProfile));
+        onLoginSuccess(activeProfile);
+      } else {
+        setSessionError('استجابة غير صالحة من السيرفر.');
+      }
+    } catch (error: any) {
+      console.warn('Guest login error:', error?.response?.data || error.message);
+      setSessionError(error?.response?.data?.message || 'فشلت العملية. تأكد من اتصالك بالإنترنت.');
     } finally {
       setIsLoading(false);
     }
@@ -180,6 +228,7 @@ export const TeacherLoginModal: React.FC<TeacherLoginModalProps> = ({
           </div>
         )}
 
+        {!isGuestMode ? (
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
@@ -353,7 +402,64 @@ export const TeacherLoginModal: React.FC<TeacherLoginModalProps> = ({
               </button>
             )}
           </div>
+          
+          <div className="pt-4 border-t border-slate-100 flex justify-center">
+             <button
+                type="button"
+                onClick={() => setIsGuestMode(true)}
+                className="text-emerald-600 hover:text-emerald-700 font-bold text-xs underline decoration-emerald-600/30 underline-offset-4 cursor-pointer"
+             >
+                الدخول كضيف للتجربة (لمدة 30 يوماً)
+             </button>
+          </div>
         </form>
+        ) : (
+        <form onSubmit={handleGuestSubmit} className="space-y-3 animate-fadeIn">
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
+              <User className="w-3.5 h-3.5 text-emerald-600" />
+              الاسم <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              required
+              placeholder="أدخل اسمك"
+              value={guestName}
+              onChange={(e) => setGuestName(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-200 outline-none text-xs font-bold text-slate-800 transition-all bg-slate-50 focus:bg-white"
+            />
+          </div>
+          
+          <div className="pt-2 flex items-center gap-2">
+            <button
+              type="submit"
+              disabled={isLoading}
+              className={`w-full sm:w-auto px-8 py-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black text-sm rounded-2xl flex items-center justify-center gap-2 shadow-lg transition-all ${
+                isLoading ? 'opacity-70 cursor-wait' : 'shadow-emerald-200 cursor-pointer'
+              }`}
+            >
+              {isLoading ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin shrink-0" />
+                  جاري الدخول...
+                </>
+              ) : (
+                <>
+                  <LogIn className="w-5 h-5" />
+                  ابدأ التجربة
+                </>
+              )}
+            </button>
+            <button
+                type="button"
+                onClick={() => setIsGuestMode(false)}
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-all cursor-pointer"
+            >
+                العودة
+            </button>
+          </div>
+        </form>
+        )}
       </div>
     </div>
   );

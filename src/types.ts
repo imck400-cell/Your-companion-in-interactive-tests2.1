@@ -49,7 +49,7 @@ export interface TeacherProfile {
   serialNumber?: string;
   grade?: string;
   section?: string;
-  role?: 'student' | 'teacher' | 'admin';
+  role?: 'student' | 'teacher' | 'admin' | 'guest_teacher';
   active_session_id?: string;
   last_activity_at?: number;
   public_ref_id?: string;
@@ -61,7 +61,7 @@ export interface TeacherProfile {
 export interface RosterUser {
   id: string;
   name: string; // الاسم
-  role: 'student' | 'teacher' | 'admin'; // الصفة (طالب أو معلم أو مدير/مشرف)
+  role: 'student' | 'teacher' | 'admin' | 'guest_teacher'; // الصفة (طالب أو معلم أو مدير/مشرف أو ضيف)
   schoolName: string; // المدرسة
   branch: string; // الفرع
   grade?: string; // الصف

@@ -19,6 +19,7 @@ Route::middleware(['throttle:60,1'])->group(function () {
 
     // Public Authentication Endpoints
     Route::post('/auth/login', [AuthController::class, 'login']);
+    Route::post('/guest-login', [AuthController::class, 'guestLogin']);
 
     // Public Analytics Endpoints (Optional Auth / Filterable via Query Params)
     Route::get('/analytics/top-performance', [AnalyticsController::class, 'topPerformance']);

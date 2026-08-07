@@ -19,6 +19,7 @@ import { StudentQuizContainer } from './components/StudentPortal/StudentQuizCont
 import { StudentArchive } from './components/StudentPortal/StudentArchive';
 import { PWAUpdatePrompt } from './components/PWAUpdatePrompt';
 import { SubscriptionExpirationModal } from './components/SubscriptionExpirationModal';
+import { GuestExpirationModal } from './components/GuestExpirationModal';
 import { fetchAllSubmissions, fetchAllRosterUsers, syncRosterToFirebase, subscribeToRoster, subscribeToSubmissions, saveSingleRosterUserToFirebase, auth, generateDeterministicUserId } from './services/adminService';
 import apiClient from './services/apiClient';
 import { saveLocalQuiz } from './services/offlineDb';
@@ -97,6 +98,8 @@ export default function App() {
   // Teacher Profile & Login Modal
   const [teacherProfile, setTeacherProfile] = useState<TeacherProfile | null>(null);
   const [isTeacherLoginModalOpen, setIsTeacherLoginModalOpen] = useState<boolean>(false);
+  const [isGuestExpired, setIsGuestExpired] = useState<boolean>(false);
+  const [guestDaysRemaining, setGuestDaysRemaining] = useState<number>(30);
 
   // Impersonation State (Super Admin viewing as School Manager)
   const [impersonatedSchool, setImpersonatedSchool] = useState<{ id: string; name: string; branch: string } | null>(null);
@@ -252,6 +255,21 @@ export default function App() {
       } catch (e) {
         console.error('Failed to parse teacher profile', e);
       }
+    }
+
+    // Check Guest Expiration
+    if (teacherProfile?.role === 'guest_teacher') {
+      apiClient.get('/auth/me').then((res) => {
+         const createdAt = new Date(res.data.created_at || res.data.data?.created_at || Date.now());
+         const now = new Date();
+         const diffTime = Math.abs(now.getTime() - createdAt.getTime());
+         const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+         const remaining = 30 - diffDays;
+         setGuestDaysRemaining(remaining);
+         if (remaining <= 0) {
+            setIsGuestExpired(true);
+         }
+      }).catch(console.error);
     }
 
     // Check if student arrived via direct link ?quizId=... or ?mode=student
@@ -518,6 +536,11 @@ export default function App() {
         onConfirmLogout={handleConfirmLogout}
       />
 
+      <GuestExpirationModal 
+        isOpen={isGuestExpired} 
+        onLogout={handleConfirmLogout} 
+      />
+
       {/* Header Bar */}
       <HeaderBar
         currentRole={role}
@@ -530,6 +553,18 @@ export default function App() {
         onShowWelcomeScreen={() => setShowWelcomeScreen(true)}
         onOpenStudentArchive={() => setShowStudentArchive(true)}
       />
+
+      {/* Persistent Guest Banner */}
+      {teacherProfile?.role === 'guest_teacher' && (
+        <div className="bg-emerald-500 text-slate-950 font-black px-4 py-2 flex flex-wrap items-center justify-center gap-2 text-xs shadow-md dir-rtl sticky top-0 z-50">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-slate-950 animate-pulse shrink-0" />
+            <span>
+              وضع التجربة (المعلم الضيف) — متبقي لك {Math.max(0, guestDaysRemaining)} أيام من أصل 30 يوم.
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Persistent Impersonation Banner for Super Admin */}
       {impersonatedSchool && (
