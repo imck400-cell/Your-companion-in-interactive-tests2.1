@@ -517,11 +517,11 @@ export const RosterManager: React.FC<RosterManagerProps> = ({
     setDeleteConfirmState({ isOpen: true, type: 'multiple' });
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (deleteConfirmState.type === 'single' && deleteConfirmState.id) {
       const idToDelete = deleteConfirmState.id;
       onUpdateRoster(roster.filter((u) => u.id !== idToDelete));
-      deleteRosterUserFromFirebase(idToDelete);
+      await apiClient.delete(`/roster/${idToDelete}`);
     } else if (deleteConfirmState.type === 'multiple') {
       let finalIdsToDelete = new Set(selectedIds);
       
@@ -548,9 +548,11 @@ export const RosterManager: React.FC<RosterManagerProps> = ({
 
       const nextRoster = roster.filter((u) => !finalIdsToDelete.has(u.id));
       onUpdateRoster(nextRoster);
-      for (const id of finalIdsToDelete) {
-        await apiClient.delete(`/roster/${id}`);
-      }
+      
+      await Promise.all(
+        Array.from(finalIdsToDelete).map(id => apiClient.delete(`/roster/${id}`))
+      );
+      
       setSelectedIds(new Set());
       // Re-enable full view so all remaining names in the school appear in the table immediately
       setShowDuplicatesOnly(false);
