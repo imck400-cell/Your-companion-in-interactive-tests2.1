@@ -8,6 +8,7 @@ interface QuizResultScreenProps {
   isStatelessPublic?: boolean;
   onRetry?: () => void;
   onRestart: () => void;
+  offlineSyncMessage?: string;
 }
 
 export const QuizResultScreen: React.FC<QuizResultScreenProps> = ({
@@ -15,6 +16,7 @@ export const QuizResultScreen: React.FC<QuizResultScreenProps> = ({
   isStatelessPublic = false,
   onRetry,
   onRestart,
+  offlineSyncMessage,
 }) => {
   const percentage = Math.round((submission.score / (submission.maxScore || 1)) * 100);
   const isPassed = percentage >= 50;
@@ -53,9 +55,11 @@ export const QuizResultScreen: React.FC<QuizResultScreenProps> = ({
         </p>
 
         {!submission.synced && (
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-900 border border-amber-200 rounded-full text-xs font-bold animate-pulse">
-            <WifiOff className="w-4 h-4 text-amber-600" />
-            تم حفظ النتيجة محلياً بدون إنترنت، وستتم المزامنة تلقائياً عند الاتصال بالشبكة
+          <div className="inline-flex flex-col items-center gap-2 px-6 py-4 bg-amber-50 text-amber-900 border-2 border-amber-300 rounded-2xl text-sm font-black animate-pulse shadow-md">
+            <div className="flex items-center gap-2">
+              <WifiOff className="w-5 h-5 text-amber-600" />
+              <span>{offlineSyncMessage || 'تم حفظ النتيجة محلياً بدون إنترنت، وستتم المزامنة تلقائياً عند الاتصال بالشبكة'}</span>
+            </div>
           </div>
         )}
       </div>

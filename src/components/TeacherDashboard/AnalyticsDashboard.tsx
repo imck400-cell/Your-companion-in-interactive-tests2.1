@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { QuizMetadata, Submission, RosterUser, TeacherProfile } from '../../types';
-import { fetchSubmissionsForQuiz } from '../../services/firebase';
 import apiClient from '../../services/apiClient';
 import {
   BarChart3,
@@ -29,7 +28,8 @@ import {
   Hash,
   RefreshCw,
   ExternalLink,
-  BookMarked
+  BookMarked,
+  Loader2
 } from 'lucide-react';
 
 interface AnalyticsDashboardProps {
@@ -188,10 +188,49 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
   const loadQuizSubmissions = async (quizId: string) => {
     setLoadingQuizSubmissions(true);
     try {
-      const subs = await fetchSubmissionsForQuiz(quizId);
+      const res = await apiClient.get(`/submissions?quiz_id=${quizId}`);
+      let subs = res.data?.data || [];
+      
+      // Map backend snake_case to frontend camelCase
+      subs = subs.map((s: any) => ({
+        id: s.id,
+        quizId: s.quiz_id || s.quizId,
+        quizTitle: s.quiz_title || s.quizTitle,
+        studentName: s.student_name || s.studentName,
+        serialNumber: s.serial_number || s.serialNumber,
+        grade: s.grade,
+        section: s.section,
+        schoolName: s.school_name || s.schoolName,
+        teacherName: s.teacher_name || s.teacherName,
+        score: s.score,
+        maxScore: s.max_score || s.maxScore,
+        percentage: s.percentage,
+        passed: s.passed,
+        correctCount: s.correct_count || s.correctCount || 0,
+        incorrectCount: s.incorrect_count || s.incorrectCount || 0,
+        skippedCount: s.skipped_count || s.skippedCount || 0,
+        totalTimeSpentSeconds: s.total_time_spent_seconds || s.totalTimeSpentSeconds || 0,
+        submittedAt: s.submitted_at || s.submittedAt || new Date().toLocaleString('ar-EG'),
+        guestDeviceUuid: s.guest_device_uuid || s.guestDeviceUuid,
+        synced: true,
+        details: (s.details || []).map((d: any) => ({
+          questionId: d.question_id || d.questionId,
+          questionText: d.question_text || d.questionText,
+          questionType: d.question_type || d.questionType,
+          studentAnswer: d.student_answer || d.studentAnswer,
+          correctAnswer: d.correct_answer || d.correctAnswer,
+          isCorrect: d.is_correct || d.isCorrect,
+          points: d.points,
+          earnedPoints: d.earned_points || d.earnedPoints,
+          skipped: d.skipped,
+          explanation: d.explanation,
+          timeSpentSeconds: d.time_spent_seconds || d.timeSpentSeconds || 0,
+        }))
+      }));
+      
       setQuizSubmissions(subs);
     } catch (err) {
-      console.warn('Fallback to prop submissions:', err);
+      console.warn('Failed to load submissions from API, falling back to props:', err);
       const propSubs = initialAllSubmissions.filter((s) => s.quizId === quizId);
       setQuizSubmissions(propSubs);
     } finally {
@@ -1062,7 +1101,10 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
 
               {/* Submissions Table */}
               {loadingQuizSubmissions ? (
-                <div className="py-12 text-center text-slate-500 text-sm">جاري تحميل سجلات الطلاب...</div>
+                <div className="py-12 text-center flex flex-col items-center justify-center space-y-3">
+                  <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mx-auto" />
+                  <p className="text-slate-500 text-sm font-bold">جاري تحميل سجلات الطلاب...</p>
+                </div>
               ) : filteredSubmissions.length === 0 ? (
                 <div className="py-12 text-center text-slate-400 text-sm bg-slate-50 rounded-2xl border border-dashed border-slate-200">
                   لم تسجل أي إجابات طلاب بعد لهذا الاختبار

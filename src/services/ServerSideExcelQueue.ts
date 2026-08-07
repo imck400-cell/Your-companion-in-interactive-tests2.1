@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx';
 import { RosterUser } from '../types';
-import { normalizeDigits, generateDeterministicUserId } from './firebase';
+import { normalizeDigits, generateDeterministicUserId } from '../utils/helpers';
 
 export interface BackgroundQueueJob {
   id: string;

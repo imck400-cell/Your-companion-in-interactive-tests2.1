@@ -3,7 +3,7 @@ import { TeacherProfile, RosterUser } from '../../types';
 import { School, User, Building, Calendar, Key, Lock, Mail, LogIn, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { validateAndAcquireSessionForTeacher } from '../../services/sessionManager';
 import apiClient from '../../services/apiClient';
-import { normalizeDigits } from '../../services/firebase';
+import { normalizeDigits } from '../../utils/helpers';
 
 interface TeacherLoginModalProps {
   isOpen: boolean;

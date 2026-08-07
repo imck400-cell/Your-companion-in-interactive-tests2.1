@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Wifi, WifiOff, RefreshCw, GraduationCap, School, Download, Sparkles, ShieldCheck, LogOut, Home, BookOpen } from 'lucide-react';
-import { syncOfflineData } from '../services/firebase';
+import { syncAllPendingData } from '../services/offlineDb';
 
 interface HeaderBarProps {
   currentRole: 'teacher' | 'student' | 'admin';
@@ -56,15 +56,11 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   const handleManualSync = async () => {
     if (!navigator.onLine || isSyncing) return;
     setIsSyncing(true);
-    setSyncStatusText('جاري المزامنة مع Firebase...');
+    setSyncStatusText('جاري المزامنة مع الخادم...');
     try {
-      const res = await syncOfflineData();
-      if (res.quizzesSynced > 0 || res.submissionsSynced > 0) {
-        setSyncStatusText(`تمت مزامنة ${res.quizzesSynced} اختبار و ${res.submissionsSynced} مشاركة بنجاح!`);
-      } else {
-        setSyncStatusText('جميع البيانات متزامنة مسبقاً.');
-      }
-      if (onRefreshClick) onRefreshClick();
+      await syncAllPendingData();
+      setSyncStatusText('تمت المزامنة بنجاح مع الخادم');
+      setTimeout(() => { if (onRefreshClick) onRefreshClick(); }, 0);
     } catch (err) {
       setSyncStatusText('حدث خطأ أثناء المزامنة.');
     } finally {
@@ -94,7 +90,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               رفيقك في الاختبارات التفاعلية
             </h1>
             <p className="text-xs text-indigo-200 font-medium hidden sm:block">
-              تطبيق PWA المعزز بقاعدة بيانات Firebase والدعم الكامل بدون إنترنت
+              تطبيق PWA المعزز بقاعدة بيانات سحابية والدعم الكامل بدون إنترنت
             </p>
           </div>
         </div>
@@ -106,7 +102,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             {isOnline ? (
               <>
                 <div className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.6)]"></div>
-                <span className="text-emerald-200 font-medium hidden md:inline">متصل بمزامنة Firebase</span>
+                <span className="text-emerald-200 font-medium hidden md:inline">متصل بالخادم (Online)</span>
               </>
             ) : (
               <>

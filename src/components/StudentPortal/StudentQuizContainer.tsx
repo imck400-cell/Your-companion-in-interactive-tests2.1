@@ -2,15 +2,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import { QuizMetadata, Question, StudentAnswer, Submission, SubmissionDetail } from '../../types';
 import { QuestionCard } from './QuestionCard';
 import { QuizResultScreen } from './QuizResultScreen';
-import { saveSubmission, syncOfflineData, checkGuestAlreadySubmitted } from '../../services/firebase';
+import apiClient from '../../services/apiClient';
 import { evaluateShortAnswer, normalizeArabicText } from '../../services/quizParser';
-import { saveStudentDraft, getStudentDraft, deleteStudentDraft } from '../../services/offlineDb';
+import { saveStudentDraft, getStudentDraft, deleteStudentDraft, saveLocalSubmission } from '../../services/offlineDb';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, ArrowRight, SkipForward, Clock, Send, ShieldCheck, WifiOff, AlertTriangle, CheckCircle, Save } from 'lucide-react';
+import { ArrowLeft, ArrowRight, SkipForward, Clock, Send, ShieldCheck, AlertTriangle, CheckCircle, Save, Loader2, CheckCircle2 } from 'lucide-react';
 
 interface StudentQuizContainerProps {
   quiz: QuizMetadata;
-  studentInfo: { name: string; grade: string; section: string; schoolName?: string; branch?: string; guestDeviceUuid?: string };
+  studentInfo: { name: string; grade: string; section: string; schoolName?: string; branch?: string; guestDeviceUuid?: string; serialNumber?: string };
   isStatelessPublic?: boolean;
   existingSubmission?: Submission | null;
   initialViewMode?: 'take' | 'result';
@@ -57,6 +57,8 @@ export const StudentQuizContainer: React.FC<StudentQuizContainerProps> = ({
   const [answers, setAnswers] = useState<Record<string, StudentAnswer>>({});
   const [questionTimeSpent, setQuestionTimeSpent] = useState<Record<string, number>>({});
   const [isSubmitted, setIsSubmitted] = useState(initialViewMode === 'result' && !!existingSubmission);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [offlineSyncMessage, setOfflineSyncMessage] = useState<string | null>(null);
   const [finalSubmission, setFinalSubmission] = useState<Submission | null>(
     initialViewMode === 'result' ? existingSubmission : null
   );
@@ -156,15 +158,6 @@ export const StudentQuizContainer: React.FC<StudentQuizContainerProps> = ({
 
     return () => clearInterval(saveInterval);
   }, [quiz.id, studentInfo, answers, questionTimeSpent, currentIndex, isSubmitted]);
-
-  // Handle Online Event to auto sync
-  useEffect(() => {
-    const handleOnline = () => {
-      syncOfflineData();
-    };
-    window.addEventListener('online', handleOnline);
-    return () => window.removeEventListener('online', handleOnline);
-  }, []);
 
   // Timer Countdown
   useEffect(() => {
@@ -337,15 +330,6 @@ export const StudentQuizContainer: React.FC<StudentQuizContainerProps> = ({
       }
     }
 
-    // Duplicate submission lock check for Guest Direct Login
-    if (studentInfo.guestDeviceUuid) {
-      const alreadySubmitted = await checkGuestAlreadySubmitted(quiz.id, studentInfo.guestDeviceUuid);
-      if (alreadySubmitted) {
-        alert('لقد قمت بتسليم هذا الاختبار مسبقاً من هذا الجهاز');
-        return;
-      }
-    }
-
     let totalScore = 0;
     let maxScore = 0;
     let correctCount = 0;
@@ -399,6 +383,7 @@ export const StudentQuizContainer: React.FC<StudentQuizContainerProps> = ({
       }
     });
 
+    const percentage = maxScore > 0 ? (totalScore / maxScore) * 100 : 0;
     const submissionObj: Submission = {
       id: `sub_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
       quizId: quiz.id,
@@ -410,6 +395,8 @@ export const StudentQuizContainer: React.FC<StudentQuizContainerProps> = ({
       teacherName: quiz.teacherName,
       score: totalScore,
       maxScore: maxScore,
+      percentage: percentage,
+      passed: percentage >= 50,
       correctCount,
       incorrectCount,
       skippedCount,
@@ -420,21 +407,50 @@ export const StudentQuizContainer: React.FC<StudentQuizContainerProps> = ({
       guestDeviceUuid: studentInfo.guestDeviceUuid,
     };
 
-    // Stage 13: STRICT CONSTRAINT - No POST Request for Public Stateless Tests!
-    if (isStatelessPublic) {
-      // Local Client-Side JS Evaluation only -> No server POST
-      console.log('Stateless Public Test completed locally (Client-Side Evaluation, No POST request sent).');
-    } else {
-      // Regular School Assignment -> Save to Database
-      const res = await saveSubmission(submissionObj);
-      submissionObj.synced = res.synced;
+    setIsSubmitting(true);
+    try {
+      if (isStatelessPublic) {
+        console.log('Stateless Public Test completed locally.');
+      } else {
+        await apiClient.post('/submissions', {
+          quiz_id: submissionObj.quizId,
+          student_name: submissionObj.studentName,
+          serial_number: studentInfo.serialNumber,
+          grade: submissionObj.grade,
+          section: submissionObj.section,
+          school_name: submissionObj.schoolName,
+          teacher_name: submissionObj.teacherName,
+          score: submissionObj.score,
+          max_score: submissionObj.maxScore,
+          percentage: submissionObj.percentage,
+          passed: submissionObj.passed,
+          correct_count: submissionObj.correctCount,
+          incorrect_count: submissionObj.incorrectCount,
+          skipped_count: submissionObj.skippedCount,
+          total_time_spent_seconds: submissionObj.totalTimeSpentSeconds,
+          details: submissionObj.details,
+          submitted_at: submissionObj.submittedAt,
+          guest_device_uuid: submissionObj.guestDeviceUuid
+        });
+        submissionObj.synced = true;
+      }
+      await deleteStudentDraft(quiz.id, studentInfo.name);
+      setFinalSubmission(submissionObj);
+      setIsSubmitted(true);
+    } catch (error: any) {
+      if (!error.response && !navigator.onLine) {
+        submissionObj.synced = false;
+        await saveLocalSubmission(submissionObj, true);
+        setOfflineSyncMessage('تم حفظ إجاباتك بأمان على جهازك بسبب ضعف الشبكة. سيتم إرسالها للمعلم تلقائياً فور عودة الاتصال');
+        await deleteStudentDraft(quiz.id, studentInfo.name);
+        setFinalSubmission(submissionObj);
+        setIsSubmitted(true);
+      } else {
+        alert(error.response?.data?.message || 'تعذر تسليم الاختبار.');
+      }
+    } finally {
+      setIsSubmitting(false);
     }
-
-    // Delete draft after successful evaluation
-    await deleteStudentDraft(quiz.id, studentInfo.name);
-
-    setFinalSubmission(submissionObj);
-    setIsSubmitted(true);
   };
 
   const handleRetry = () => {
@@ -443,21 +459,9 @@ export const StudentQuizContainer: React.FC<StudentQuizContainerProps> = ({
     setCurrentIndex(0);
     setIsSubmitted(false);
     setFinalSubmission(null);
+    setOfflineSyncMessage(null);
     if (quiz.timeLimitMinutes && quiz.timeLimitMinutes > 0) {
       setTimeLeftSeconds(quiz.timeLimitMinutes * 60);
-    }
-    if (quiz.questions && quiz.questions.length > 0) {
-      const questionsList = quiz.questions as Question[];
-      const randomized = shuffleArray(questionsList).map((q) => {
-        if (q.type === 'multiple_choice' && q.options && q.options.length > 0) {
-          return {
-            ...q,
-            options: shuffleArray(q.options),
-          };
-        }
-        return q;
-      });
-      setShuffledQuestions(randomized);
     }
   };
 
@@ -468,6 +472,7 @@ export const StudentQuizContainer: React.FC<StudentQuizContainerProps> = ({
         isStatelessPublic={isStatelessPublic}
         onRetry={quiz.allowFullQuizRetake ? handleRetry : undefined}
         onRestart={onFinish || (() => {})}
+        offlineSyncMessage={offlineSyncMessage || undefined}
       />
     );
   }
@@ -485,13 +490,7 @@ export const StudentQuizContainer: React.FC<StudentQuizContainerProps> = ({
     if (Array.isArray(ans)) return ans.length > 0;
     if (typeof ans === 'object') {
       const keys = Object.keys(ans);
-      if (keys.length === 0) return false;
-      return keys.some((k) => {
-        const val = ans[k];
-        if (typeof val === 'string') return val.trim().length > 0;
-        if (Array.isArray(val)) return val.length > 0;
-        return !!val;
-      });
+      return keys.length > 0 && keys.some((k) => !!ans[k]);
     }
     return !!ans;
   })();
@@ -507,16 +506,14 @@ export const StudentQuizContainer: React.FC<StudentQuizContainerProps> = ({
 
   return (
     <div className="max-w-3xl mx-auto my-6 px-4 dir-rtl space-y-4">
-      {/* Top Header & Status */}
       <div className="bg-white rounded-2xl p-4 shadow-md border border-slate-200 space-y-3">
-        {/* Stage 13: Stateless Public Test Notice */}
         {isStatelessPublic && (
           <div className="px-3.5 py-2 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-950 font-black flex items-center justify-between gap-2">
             <span className="flex items-center gap-1.5 text-emerald-800">
               <ShieldCheck className="w-4 h-4 text-emerald-600" />
-              اختبار عام تدريبي (Stateless) - تصحيح كلي عبر Client-Side JS مع حظر تام لإرسال طلبات POST للخادم.
+              اختبار عام تدريبي (Stateless)
             </span>
-            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-md text-[10px]">0% Server Overhead</span>
+            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-md text-[10px]">Client-Side Only</span>
           </div>
         )}
 
@@ -526,11 +523,11 @@ export const StudentQuizContainer: React.FC<StudentQuizContainerProps> = ({
             {studentInfo.schoolName && (
               <>
                 <span className="text-slate-300">|</span>
-                <span className="text-slate-600 font-bold">{studentInfo.schoolName} ({studentInfo.branch || 'عام'})</span>
+                <span className="text-slate-600 font-bold">{studentInfo.schoolName}</span>
               </>
             )}
             <span className="text-slate-300">|</span>
-            <span>الصف: {studentInfo.grade} - الشعبة: {studentInfo.section}</span>
+            <span>الصف: {studentInfo.grade}</span>
           </div>
 
           <div className="flex items-center gap-3">
@@ -551,11 +548,10 @@ export const StudentQuizContainer: React.FC<StudentQuizContainerProps> = ({
           </div>
         </div>
 
-        {/* Visual Progress Bar */}
         <div className="space-y-1">
           <div className="flex items-center justify-between text-[11px] font-bold text-slate-500">
             <span>نسبة إكمال الإجابات:</span>
-            <span className="text-indigo-600 font-extrabold">{progressPercent}% ({answeredCount} من {questions.length} سؤال)</span>
+            <span className="text-indigo-600 font-extrabold">{progressPercent}% ({answeredCount} من {questions.length})</span>
           </div>
           <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
             <div
@@ -565,51 +561,33 @@ export const StudentQuizContainer: React.FC<StudentQuizContainerProps> = ({
           </div>
         </div>
 
-        {/* Interactive Scrollable Question Track under Progress Bar */}
-        <div className="space-y-1 pt-1">
-          <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 px-0.5">
-            <span>شريط أسئلة الاختبار التفاعلي (اسحب أفقيًا لتصفح كافة الأسئلة):</span>
-            <div className="flex items-center gap-2">
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500"></span> مجاب</span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500"></span> متخطى</span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-slate-300"></span> متبقي</span>
-            </div>
-          </div>
-
-          <div
+        <div
             ref={navBarRef}
-            className="flex items-center gap-2 overflow-x-auto py-2 px-1.5 scrollbar-thin scrollbar-thumb-indigo-200 scrollbar-track-slate-100 rounded-xl bg-slate-50 border border-slate-200/80 shadow-inner"
-            style={{ scrollBehavior: 'smooth' }}
+            className="flex items-center gap-2 overflow-x-auto py-2 px-1.5 scrollbar-thin rounded-xl bg-slate-50 border border-slate-200/80 shadow-inner"
           >
             {questions.map((q, idx) => {
               const ans = answers[q.id];
               const isCurrent = idx === currentIndex;
               const isAnswered = ans && ans.answer !== null && ans.answer !== undefined && !ans.skipped && (typeof ans.answer !== 'string' || ans.answer.trim().length > 0);
               const isSkipped = ans && ans.skipped;
-
-              let pillStyle = 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100';
-              if (isAnswered) pillStyle = 'bg-emerald-600 text-white border-emerald-600 font-bold shadow-xs';
-              else if (isSkipped) pillStyle = 'bg-amber-500 text-white border-amber-500 font-bold shadow-xs';
-
-              if (isCurrent) pillStyle += ' ring-2 ring-indigo-600 ring-offset-2 scale-110 font-black z-10';
-
+              let pillStyle = 'bg-white text-slate-700 border-slate-300';
+              if (isAnswered) pillStyle = 'bg-emerald-600 text-white border-emerald-600';
+              else if (isSkipped) pillStyle = 'bg-amber-500 text-white border-amber-500';
+              if (isCurrent) pillStyle += ' ring-2 ring-indigo-600 ring-offset-2 scale-110 font-black';
               return (
                 <button
                   key={q.id}
                   type="button"
                   onClick={() => setCurrentIndex(idx)}
                   className={`min-w-8 h-8 rounded-lg text-xs flex items-center justify-center border transition-all shrink-0 px-2.5 ${pillStyle}`}
-                  title={`الانتقال إلى السؤال ${idx + 1}`}
                 >
                   س{idx + 1}
                 </button>
               );
             })}
           </div>
-        </div>
       </div>
 
-      {/* Card Wrapper with AnimatePresence */}
       <AnimatePresence mode="wait">
         <motion.div
           key={currentQuestion.id}
@@ -634,7 +612,6 @@ export const StudentQuizContainer: React.FC<StudentQuizContainerProps> = ({
         </motion.div>
       </AnimatePresence>
 
-      {/* Navigation & Controls */}
       <div className="flex flex-wrap items-center justify-between gap-3 pt-2 pb-8">
         <button
           type="button"
@@ -643,7 +620,7 @@ export const StudentQuizContainer: React.FC<StudentQuizContainerProps> = ({
           className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center gap-1.5 disabled:opacity-30 transition-all"
         >
           <ArrowRight className="w-4 h-4" />
-          السؤال السابق
+          السابق
         </button>
 
         <button
@@ -652,44 +629,36 @@ export const StudentQuizContainer: React.FC<StudentQuizContainerProps> = ({
           className="px-3.5 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold rounded-xl text-xs flex items-center gap-1 transition-all border border-amber-200"
         >
           <SkipForward className="w-4 h-4 text-amber-600" />
-          تخطي السؤال
+          تخطي
         </button>
 
         {currentIndex < questions.length - 1 ? (
-          <div className="flex flex-col items-end gap-1">
-            <button
-              type="button"
-              onClick={goToNextQuestion}
-              disabled={!isCurrentQuestionAnswered}
-              className={`px-5 py-2.5 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all ${
-                isCurrentQuestionAnswered
-                  ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/20 cursor-pointer'
-                  : 'bg-slate-200 text-slate-400 border border-slate-300 cursor-not-allowed opacity-60'
-              }`}
-              title={!isCurrentQuestionAnswered ? 'يرجى الإجابة عن السؤال للانتقال، أو اضغط زر تخطي' : ''}
-            >
-              السؤال التالي
-              <ArrowLeft className="w-4 h-4" />
-            </button>
-            {!isCurrentQuestionAnswered && (
-              <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
-                أجِب للتفعيل أو اضغط "تخطي"
-              </span>
-            )}
-          </div>
+          <button
+            type="button"
+            onClick={goToNextQuestion}
+            disabled={!isCurrentQuestionAnswered}
+            className={`px-5 py-2.5 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all ${
+              isCurrentQuestionAnswered
+                ? 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+            }`}
+          >
+            التالي
+            <ArrowLeft className="w-4 h-4" />
+          </button>
         ) : (
           <button
             type="button"
             onClick={handleAttemptSubmit}
-            className="px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold rounded-2xl text-xs flex items-center gap-2 shadow-lg shadow-emerald-600/30 transition-all transform hover:scale-[1.02] cursor-pointer"
+            disabled={isSubmitting}
+            className="w-full sm:w-auto px-10 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-black rounded-xl text-xs sm:text-sm shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-2 transition-all"
           >
-            <Send className="w-4 h-4" />
-            {isStatelessPublic ? 'إنهاء وإظهار التقرير' : 'تسليم وإرادة النتيجة'}
+            {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}
+            {isSubmitting ? 'جاري التسليم...' : 'تسليم وإنهاء الاختبار'}
           </button>
         )}
       </div>
 
-      {/* Confirmation Modal for Unanswered Questions */}
       {showConfirmModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <motion.div

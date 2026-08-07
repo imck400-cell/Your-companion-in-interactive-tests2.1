@@ -19,8 +19,10 @@ import { StudentQuizContainer } from './components/StudentPortal/StudentQuizCont
 import { StudentArchive } from './components/StudentPortal/StudentArchive';
 import { PWAUpdatePrompt } from './components/PWAUpdatePrompt';
 import { SubscriptionExpirationModal } from './components/SubscriptionExpirationModal';
-import { fetchAllQuizzes, fetchQuizById, saveQuiz, fetchAllSubmissions, fetchAllRosterUsers, syncRosterToFirebase, subscribeToRoster, subscribeToQuizzes, subscribeToSubmissions, saveSingleRosterUserToFirebase, auth, generateDeterministicUserId } from './services/firebase';
-import { PlusCircle, BookOpen, BarChart3, GraduationCap, Sparkles, CheckCircle2, Library, UserCheck, ShieldCheck, Users, Archive } from 'lucide-react';
+import { fetchAllSubmissions, fetchAllRosterUsers, syncRosterToFirebase, subscribeToRoster, subscribeToSubmissions, saveSingleRosterUserToFirebase, auth, generateDeterministicUserId } from './services/adminService';
+import apiClient from './services/apiClient';
+import { saveLocalQuiz } from './services/offlineDb';
+import { PlusCircle, BookOpen, BarChart3, GraduationCap, Sparkles, CheckCircle2, Library, UserCheck, ShieldCheck, Users, Archive, Loader2 } from 'lucide-react';
 
 export default function App() {
   const [role, setRole] = useState<'teacher' | 'student' | 'admin'>('teacher');
@@ -142,6 +144,8 @@ export default function App() {
   const [parsedQuestions, setParsedQuestions] = useState<Question[]>([]);
   const [savedQuizzes, setSavedQuizzes] = useState<QuizMetadata[]>([]);
   const [selectedQuizForAnalytics, setSelectedQuizForAnalytics] = useState<QuizMetadata | null>(null);
+  const [isQuizzesLoading, setIsQuizzesLoading] = useState<boolean>(false);
+  const [isSavingQuiz, setIsSavingQuiz] = useState<boolean>(false);
 
   // Check if current user has Manager / Admin permission
   const isSchoolAdmin = useMemo(() => {
@@ -231,16 +235,7 @@ export default function App() {
       }
     );
 
-    // Targeted Subscribe to live Firestore quizzes updates for isolated school
-    const unsubscribeQuizzes = subscribeToQuizzes(
-      (remoteQuizzes) => {
-        setSavedQuizzes(remoteQuizzes);
-      },
-      {
-        schoolName: teacherProfile?.schoolName,
-        createdBy: teacherProfile?.teacherCode,
-      }
-    );
+
 
     // Targeted Subscribe to live Firestore submissions updates
     const unsubscribeSubmissions = subscribeToSubmissions((remoteSubs) => {
@@ -269,15 +264,14 @@ export default function App() {
       setShowWelcomeScreen(false);
       setIsStudentOnlyMode(true);
       if (quizId) {
-        fetchQuizById(quizId).then((q) => {
-          if (q) setActiveStudentQuiz(q);
-        });
+        apiClient.get(`/quizzes/${quizId}`)
+          .then(res => { if (res.data?.data) setActiveStudentQuiz(res.data.data); })
+          .catch(err => console.warn('Failed to fetch quiz by id', err));
       }
     }
 
     return () => {
       unsubscribeRoster();
-      unsubscribeQuizzes();
       unsubscribeSubmissions();
     };
   }, [teacherProfile?.schoolName, teacherProfile?.branch, teacherProfile?.teacherCode]);
@@ -358,8 +352,17 @@ export default function App() {
   };
 
   const loadQuizzes = async () => {
-    const list = await fetchAllQuizzes();
-    setSavedQuizzes(list);
+    setIsQuizzesLoading(true);
+    try {
+      const response = await apiClient.get('/quizzes');
+      if (response.data?.data) {
+        setSavedQuizzes(response.data.data);
+      }
+    } catch (e: any) {
+      console.warn('Failed to load quizzes via API:', e);
+    } finally {
+      setIsQuizzesLoading(false);
+    }
   };
 
   const handleQuestionsParsed = (questions: Question[]) => {
@@ -378,7 +381,8 @@ export default function App() {
       return;
     }
 
-    const quizId = currentQuizMeta.id || `quiz_${Date.now()}`;
+    const isUpdating = currentQuizMeta.id && !currentQuizMeta.id.startsWith('temp_');
+    const quizId = currentQuizMeta.id || `temp_${Date.now()}`;
     const newQuiz: QuizMetadata = {
       id: quizId,
       title: currentQuizMeta.title || 'اختبار تفاعلي',
@@ -405,20 +409,42 @@ export default function App() {
       allowFullQuizRetake: !!currentQuizMeta.allowFullQuizRetake,
     };
 
-    const res = await saveQuiz(newQuiz);
-    await loadQuizzes();
-
-    if (res.success) {
-      setSaveMessage(
-        res.synced
-          ? 'تم حفظ ومزامنة الاختبار بنجاح مع السيرفر المحلي!'
-          : 'تم حفظ الاختبار محلياً في جهازك بدون إنترنت، وستتم المزامنة تلقائياً عند الاتصال بالشبكة.'
-      );
-      setTeacherTab('manage');
-    } else {
-      alert(`فشل حفظ الاختبار: ${res.error || 'خطأ غير معروف'}`);
+    setIsSavingQuiz(true);
+    try {
+      let response;
+      if (isUpdating) {
+        response = await apiClient.put(`/quizzes/${currentQuizMeta.id}`, newQuiz);
+      } else {
+        const payload = { ...newQuiz, id: undefined };
+        response = await apiClient.post('/quizzes', payload);
+      }
+      
+      const serverQuiz = response.data?.data;
+      if (serverQuiz) {
+        setSavedQuizzes(prev => {
+          if (isUpdating) return prev.map(q => q.id === serverQuiz.id ? serverQuiz : q);
+          return [serverQuiz, ...prev];
+        });
+        await saveLocalQuiz(serverQuiz, false);
+        setSaveMessage('تم حفظ الاختبار واعتماده بنجاح!');
+        setTeacherTab('manage');
+      }
+    } catch (error: any) {
+      if (!error.response && !navigator.onLine) {
+        newQuiz.synced = false;
+        await saveLocalQuiz(newQuiz, true);
+        setSavedQuizzes(prev => [newQuiz, ...prev]);
+        setSaveMessage('تم الحفظ محلياً لعدم توفر إنترنت. ستتم المزامنة تلقائياً عند عودة الاتصال');
+        setTeacherTab('manage');
+      } else {
+        const errors = error.response?.data?.errors;
+        const msgs = errors ? Object.values(errors).flat().join('\n') : error.response?.data?.message || 'فشل حفظ الاختبار.';
+        alert(msgs);
+      }
+    } finally {
+      setIsSavingQuiz(false);
+      setTimeout(() => setSaveMessage(null), 5000);
     }
-    setTimeout(() => setSaveMessage(null), 5000);
   };
 
   if (showWelcomeScreen) {
@@ -672,7 +698,13 @@ export default function App() {
 
             {/* Tab 1: Create Quiz */}
             {teacherTab === 'create' && (
-              <div className="space-y-6">
+              <div className="space-y-6 animate-fadeIn relative">
+                {isQuizzesLoading && (
+                  <div className="absolute inset-0 bg-white/50 backdrop-blur-sm z-10 flex flex-col items-center justify-center rounded-2xl border border-slate-100">
+                    <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mb-2" />
+                    <span className="text-slate-600 text-sm font-bold">جاري جلب الاختبارات...</span>
+                  </div>
+                )}
                 <QuizMetadataForm
                   metadata={currentQuizMeta}
                   onChange={setCurrentQuizMeta}
@@ -696,11 +728,11 @@ export default function App() {
                   <button
                     type="button"
                     onClick={handleSaveQuiz}
-                    disabled={parsedQuestions.length === 0}
+                    disabled={parsedQuestions.length === 0 || isSavingQuiz}
                     className="px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-emerald-600/30 disabled:opacity-50 transition-all transform hover:scale-105"
                   >
-                    <Sparkles className="w-4 h-4" />
-                    حفظ الاختبار نهائياً (مزامنة واحدة)
+                    {isSavingQuiz ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                    {isSavingQuiz ? 'جاري الحفظ...' : 'حفظ الاختبار نهائياً (مزامنة واحدة)'}
                   </button>
                 </div>
               </div>

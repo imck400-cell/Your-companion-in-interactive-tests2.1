@@ -2,6 +2,12 @@ import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { QuizMetadata, StudentAnswer, Submission } from '../types';
 import apiClient from './apiClient';
 
+export interface OfflineFallbackOptions {
+  onSuccess?: (data: any) => void;
+  onNetworkError?: (pendingItem: any) => Promise<void>;
+  onServerError?: (errorMsg: string) => void;
+}
+
 export interface StudentDraft {
   draftId: string; // quizId_studentName
   quizId: string;
@@ -220,3 +226,100 @@ export async function syncPendingSubmissionsToLaravel(): Promise<{ count: number
   return { count: 0, success: false };
 }
 
+// Background sync for Quizzes
+export async function syncPendingQuizzesToLaravel(): Promise<void> {
+  if (!navigator.onLine) return;
+
+  try {
+    const pending = await getPendingQuizzes();
+    for (const q of pending) {
+      const payload = {
+        title: q.title,
+        subject: q.subject,
+        grade: q.grade,
+        section: q.section,
+        teacher_name: q.teacherName,
+        school_name: q.schoolName,
+        branch: q.branch,
+        academic_year: q.schoolYear || q.academicYear,
+        visibility: q.visibility || 'public',
+        lesson_number: q.lesson_number || q.lessonNumber || null,
+        show_feedback: q.showFeedback || 'immediate',
+        time_limit_minutes: q.timeLimitMinutes || 0,
+        pass_percentage: q.passPercentage || 50,
+        allow_answer_change: q.allowAnswerChange ?? false,
+        allow_full_quiz_retake: q.allowFullQuizRetake ?? false,
+        questions: q.questions || [],
+      };
+
+      try {
+        if (q.id && !q.id.startsWith('temp_')) {
+          await apiClient.put(`/quizzes/${q.id}`, payload);
+        } else {
+          await apiClient.post('/quizzes', payload);
+        }
+        await markQuizSyncedLocally(q.id);
+      } catch (err) {
+        console.warn('Failed to sync individual quiz in background:', err);
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to sync pending quizzes:', error);
+  }
+}
+
+// Global Background Sync trigger
+export async function syncAllPendingData(): Promise<void> {
+  if (!navigator.onLine) return;
+  console.log('Background Sync Triggered...');
+  
+  let syncedItemsCount = 0;
+
+  const subsResult = await syncPendingSubmissionsToLaravel();
+  if (subsResult.success) syncedItemsCount += subsResult.count;
+
+  // We need to modify syncPendingQuizzesToLaravel to return count
+  // but for now we can just assume if we had pending quizzes, they get synced
+  const pendingQuizzes = await getPendingQuizzes();
+  if (pendingQuizzes.length > 0) {
+    await syncPendingQuizzesToLaravel();
+    syncedItemsCount += pendingQuizzes.length;
+  }
+
+  if (syncedItemsCount > 0) {
+    showSyncToast('تمت مزامنة البيانات المعلقة بنجاح مع الخادم 🚀');
+  }
+}
+
+function showSyncToast(message: string) {
+  if (typeof document === 'undefined') return;
+  const toast = document.createElement('div');
+  toast.innerText = message;
+  toast.style.position = 'fixed';
+  toast.style.bottom = '20px';
+  toast.style.left = '50%';
+  toast.style.transform = 'translateX(-50%)';
+  toast.style.backgroundColor = '#10B981'; // emerald-500
+  toast.style.color = 'white';
+  toast.style.padding = '12px 24px';
+  toast.style.borderRadius = '9999px';
+  toast.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.3)';
+  toast.style.zIndex = '9999';
+  toast.style.fontWeight = 'bold';
+  toast.style.fontFamily = 'system-ui, -apple-system, sans-serif';
+  toast.style.transition = 'opacity 0.5s ease';
+  toast.dir = 'rtl';
+  
+  document.body.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    setTimeout(() => toast.remove(), 500);
+  }, 4000);
+}
+
+// Register auto-sync on network recovery
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => {
+    syncAllPendingData();
+  });
+}

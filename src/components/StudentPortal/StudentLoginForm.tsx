@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { User, GraduationCap, School, ArrowLeft, Sparkles, Key, Lock, CheckCircle2, ShieldCheck, Mail, AlertTriangle, BadgeCheck } from 'lucide-react';
 import { QuizMetadata, RosterUser } from '../../types';
 import { validateAndAcquireSessionForRosterUser } from '../../services/sessionManager';
-import { verifyStudentLogin, normalizeDigits, loginWithSerialAndPasscode, findUserAndSchoolBySerial, saveSingleRosterUserToFirebase } from '../../services/firebase';
+import { normalizeDigits } from '../../utils/helpers';
+import apiClient from '../../services/apiClient';
 import { getOrCreateGuestDeviceUuid, getGuestLockedIdentity, saveGuestLockedIdentity } from '../../services/deviceFingerprint';
 
 interface StudentLoginFormProps {
@@ -61,75 +62,13 @@ export const StudentLoginForm: React.FC<StudentLoginFormProps> = ({
     }
   }, [loginMode]);
 
-  // Live Validation on input change for Serial & Code
+  const [isVerifying, setIsVerifying] = useState(false);
+
+  // Clear matched user if inputs change, requiring re-verification
   useEffect(() => {
-    setSessionError(null);
-    if (loginMode !== 'serial') return;
-
-    const trimmedSerial = serialNumber.trim();
-    const trimmedCode = code.trim();
-
-    if (!trimmedSerial) {
-      setMatchedUser(null);
-      setMatchError(null);
-      return;
-    }
-
-    let isSubscribed = true;
-
-    const validateUser = async () => {
-      const normSerial = normalizeDigits(serialNumber);
-      const normCode = normalizeDigits(code);
-
-      if (!normSerial) {
-        setMatchedUser(null);
-        setMatchError(null);
-        return;
-      }
-
-      // 1. Direct search in Firestore database first to ensure accurate match across all devices
-      let found: RosterUser | null = null;
-      try {
-        found = await verifyStudentLogin(normSerial, normCode);
-      } catch (e) {
-        console.error("Firebase auth verification error:", e);
-      }
-
-      // 2. Fallback to local roster state if database query didn't return a match or if offline
-      if (!found) {
-        found = roster.find(
-          (u) =>
-            normalizeDigits(u.serialNumber) === normSerial &&
-            (!u.code || !normCode || normalizeDigits(u.code) === normCode || normalizeDigits(u.code).startsWith(normCode))
-        ) || null;
-      }
-
-      if (!isSubscribed) return;
-
-      if (found) {
-        setMatchedUser(found);
-        setName(found.name);
-        setGrade(found.grade || quiz.grade || 'الصف العام');
-        setSection(found.section || quiz.section || 'أ');
-        setSchoolName(found.schoolName || quiz.schoolName || '');
-        setBranch(found.branch || quiz.branch || '');
-        if (found.email) setBindEmailInput(found.email);
-        setMatchError(null);
-      } else if (normSerial.length >= 1) {
-        setMatchedUser(null);
-        setMatchError('لم نجد طالباً ينطبق عليه الرقم التسلسلي والكود.');
-      } else {
-        setMatchedUser(null);
-        setMatchError(null);
-      }
-    };
-
-    validateUser();
-
-    return () => {
-      isSubscribed = false;
-    };
-  }, [serialNumber, code, roster, quiz, loginMode]);
+    setMatchedUser(null);
+    setMatchError(null);
+  }, [serialNumber, code, loginMode]);
 
   // Live Email Lookup for Email Mode
   useEffect(() => {
@@ -202,18 +141,51 @@ export const StudentLoginForm: React.FC<StudentLoginFormProps> = ({
       return;
     }
 
-    if (loginMode === 'serial' && serialNumber && code) {
-      // 1. Firebase Auth Trick (Serial + Passcode) with Session Persistence
-      const authRes = await loginWithSerialAndPasscode(serialNumber, code);
-      if (!authRes.success) {
-        setSessionError(authRes.error || 'فشلت المصادقة السحابية باستخدام الرقم التسلسلي والكود.');
-        return;
-      }
-
-      // 2. Discover School & User via Collection Group Query across /schools/{school_id}/users
-      const discovered = await findUserAndSchoolBySerial(serialNumber);
-      if (discovered?.user) {
-        setMatchedUser(discovered.user);
+    if (loginMode === 'serial') {
+      if (!matchedUser) {
+        // Step 1: Verify from server (No longer live)
+        setIsVerifying(true);
+        try {
+          const response = await apiClient.post('/auth/login', {
+            serial_number: normalizeDigits(serialNumber),
+            code: normalizeDigits(code),
+            role: 'student',
+          });
+          
+          if (response.data && response.data.data) {
+            const { token, user } = response.data.data;
+            if (token) {
+              localStorage.setItem('sanctum_token', token);
+              localStorage.setItem('auth_token', token);
+            }
+            const u: RosterUser = {
+              id: String(user.id),
+              name: user.name,
+              role: user.role,
+              serialNumber: user.serial_number,
+              code: user.code,
+              schoolName: user.school_name,
+              branch: user.branch,
+              grade: user.grade,
+              section: user.section,
+            };
+            setMatchedUser(u);
+            setName(u.name);
+            setGrade(u.grade || quiz.grade || 'الصف العام');
+            setSection(u.section || quiz.section || 'أ');
+            setSchoolName(u.schoolName || quiz.schoolName || '');
+            setBranch(u.branch || quiz.branch || '');
+            if (u.email) setBindEmailInput(u.email);
+            setMatchError(null);
+          } else {
+             setMatchError('استجابة غير صالحة من السيرفر.');
+          }
+        } catch (error: any) {
+          setMatchError(error?.response?.data?.message || 'فشلت المصادقة باستخدام الرقم التسلسلي والكود.');
+        } finally {
+          setIsVerifying(false);
+        }
+        return; // Wait for user to confirm in Step 2
       }
     }
 
@@ -243,7 +215,13 @@ export const StudentLoginForm: React.FC<StudentLoginFormProps> = ({
     }
 
     const activeUser = sessionRes.updatedUser || currentUser;
-    await saveSingleRosterUserToFirebase(activeUser);
+    try {
+      if (activeUser.id && !activeUser.id.startsWith('temp_')) {
+        await apiClient.put(`/roster/${activeUser.id}`, activeUser);
+      }
+    } catch(e) {
+      console.warn("Failed to update user locally/remotely:", e);
+    }
     if (onUpdateRosterUser) {
       onUpdateRosterUser(activeUser);
     }
@@ -422,15 +400,15 @@ export const StudentLoginForm: React.FC<StudentLoginFormProps> = ({
 
           <button
             type="submit"
-            disabled={!matchedUser}
+            disabled={(!serialNumber || !code) || isVerifying}
             className={`w-full py-3.5 text-white font-black rounded-xl text-xs flex items-center justify-center gap-2 shadow-md transition-all ${
-              matchedUser
+              (serialNumber && code)
                 ? 'bg-emerald-600 hover:bg-emerald-500 cursor-pointer shadow-emerald-600/30'
                 : 'bg-slate-400 cursor-not-allowed opacity-70'
             }`}
           >
             <ShieldCheck className="w-4 h-4 text-amber-300" />
-            {matchedUser ? 'تأكيد الدخول الآمن لبوابة الاختبار' : 'أدخل الرقم التسلسلي والكود للتحقق'}
+            {isVerifying ? 'جاري التحقق...' : matchedUser ? 'تأكيد الدخول الآمن لبوابة الاختبار' : 'أدخل الرقم التسلسلي والكود للتحقق'}
           </button>
         </form>
       )}

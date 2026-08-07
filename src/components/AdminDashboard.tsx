@@ -22,7 +22,7 @@ import {
   fetchRosterPaginated,
   getSchoolsCount,
   getRosterCount
-} from '../services/firebase';
+} from '../services/adminService';
 import {
   ShieldCheck,
   School,

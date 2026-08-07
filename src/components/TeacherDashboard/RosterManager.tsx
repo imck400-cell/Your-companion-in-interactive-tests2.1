@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { deleteRosterUserFromFirebase, saveSingleRosterUserToFirebase, syncRosterToFirebase, normalizeDigits, generateDeterministicUserId } from '../../services/firebase';
+import { normalizeDigits, generateDeterministicUserId } from '../../utils/helpers';
+import apiClient from '../../services/apiClient';
 import * as XLSX from 'xlsx';
 import { RosterUser, TeacherProfile } from '../../types';
 import { PrintWatermark } from '../PrintWatermark';
@@ -201,7 +202,7 @@ export const RosterManager: React.FC<RosterManagerProps> = ({
           },
           async (newUsers, finalJobState) => {
             if (newUsers.length > 0) {
-              await syncRosterToFirebase(newUsers);
+              await apiClient.post('/roster/sync', { users: newUsers });
               onUpdateRoster([...roster, ...newUsers]);
             }
             
@@ -327,7 +328,7 @@ export const RosterManager: React.FC<RosterManagerProps> = ({
           return;
         }
 
-        await syncRosterToFirebase(newUsers);
+        await apiClient.post('/roster/sync', { users: newUsers });
         const updatedRoster = [...roster, ...newUsers];
         onUpdateRoster(updatedRoster);
 
@@ -379,7 +380,7 @@ export const RosterManager: React.FC<RosterManagerProps> = ({
         createdAt: new Date().toISOString(),
       };
 
-      await saveSingleRosterUserToFirebase(newUser);
+      await apiClient.post('/roster', newUser);
       onUpdateRoster([newUser, ...roster]);
 
       setAddName('');
@@ -547,7 +548,9 @@ export const RosterManager: React.FC<RosterManagerProps> = ({
 
       const nextRoster = roster.filter((u) => !finalIdsToDelete.has(u.id));
       onUpdateRoster(nextRoster);
-      finalIdsToDelete.forEach((id: string) => deleteRosterUserFromFirebase(id));
+      for (const id of finalIdsToDelete) {
+        await apiClient.delete(`/roster/${id}`);
+      }
       setSelectedIds(new Set());
       // Re-enable full view so all remaining names in the school appear in the table immediately
       setShowDuplicatesOnly(false);

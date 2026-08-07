@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { QuizMetadata, Submission } from '../../types';
 import { deleteLocalQuiz } from '../../services/offlineDb';
-import { deleteQuizFromFirebase } from '../../services/firebase';
-import { BookOpen, Copy, Eye, BarChart3, Trash2, Check, QrCode, Edit3, Wifi, WifiOff, RefreshCw } from 'lucide-react';
+import apiClient from '../../services/apiClient';
+import { BookOpen, Copy, Eye, BarChart3, Trash2, Check, QrCode, Edit3, Wifi, WifiOff, RefreshCw, Loader2 } from 'lucide-react';
 
 interface QuizListManagerProps {
   quizzes: QuizMetadata[];
@@ -25,6 +25,7 @@ export const QuizListManager: React.FC<QuizListManagerProps> = ({
 }) => {
   const [copiedQuizId, setCopiedQuizId] = useState<string | null>(null);
   const [qrModalQuiz, setQrModalQuiz] = useState<QuizMetadata | null>(null);
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
 
   const handleCopyLink = (quizId: string) => {
     const link = `${window.location.origin}${window.location.pathname}?quizId=${quizId}`;
@@ -34,10 +35,21 @@ export const QuizListManager: React.FC<QuizListManagerProps> = ({
   };
 
   const handleDelete = async (quizId: string) => {
-    if (window.confirm('هل أنت تأكد من رغبتك في حذف هذا الاختبار؟')) {
-      await deleteQuizFromFirebase(quizId);
-      await deleteLocalQuiz(quizId);
-      onDeleteSuccess();
+    if (window.confirm('هل أنت متأكد من رغبتك في حذف هذا الاختبار؟')) {
+      setIsDeleting(quizId);
+      try {
+        await apiClient.delete(`/quizzes/${quizId}`);
+        await deleteLocalQuiz(quizId);
+        onDeleteSuccess();
+      } catch (error: any) {
+        if (!error.response && !navigator.onLine) {
+          alert('لا يوجد اتصال بالإنترنت لإتمام عملية الحذف. حاول لاحقاً.');
+        } else {
+          alert(error?.response?.data?.message || 'حدث خطأ أثناء محاولة الحذف.');
+        }
+      } finally {
+        setIsDeleting(null);
+      }
     }
   };
 
@@ -193,10 +205,15 @@ export const QuizListManager: React.FC<QuizListManagerProps> = ({
                   <button
                     type="button"
                     onClick={() => handleDelete(quiz.id)}
-                    className="p-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl"
+                    disabled={isDeleting === quiz.id}
+                    className="p-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl disabled:opacity-50"
                     title="حذف الاختبار"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    {isDeleting === quiz.id ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-4 h-4" />
+                    )}
                   </button>
                 </div>
               </div>
