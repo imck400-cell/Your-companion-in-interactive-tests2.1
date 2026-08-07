@@ -36,20 +36,24 @@ Route::middleware(['throttle:60,1'])->group(function () {
         Route::get('/quizzes', [QuizController::class, 'index']);
         Route::get('/quizzes/my-school-subjects', [QuizController::class, 'mySchoolSubjects']);
         Route::get('/quizzes/general-grouped', [QuizController::class, 'generalGrouped']);
-        Route::post('/quizzes', [QuizController::class, 'store']);
+        Route::post('/quizzes', [QuizController::class, 'store'])->middleware(\App\Http\Middleware\CheckSchoolActive::class);
         Route::get('/quizzes/{id}', [QuizController::class, 'show']);
-        Route::put('/quizzes/{id}', [QuizController::class, 'update']);
+        Route::put('/quizzes/{id}', [QuizController::class, 'update'])->middleware(\App\Http\Middleware\CheckSchoolActive::class);
         Route::delete('/quizzes/{id}', [QuizController::class, 'destroy']);
 
         // Submissions & Deduplicated Batch Offline Sync
         Route::get('/submissions', [SubmissionController::class, 'index']);
-        Route::post('/submissions', [SubmissionController::class, 'store']);
-        Route::post('/submissions/sync', [SubmissionController::class, 'syncOfflineSubmissions']); // Batch offline sync
+        Route::post('/submissions', [SubmissionController::class, 'store'])
+            ->middleware(['throttle:5,1', \App\Http\Middleware\CheckSchoolActive::class]);
+        Route::post('/submissions/sync', [SubmissionController::class, 'syncOfflineSubmissions'])
+            ->middleware([\App\Http\Middleware\CheckSchoolActive::class]);
         Route::get('/submissions/{id}', [SubmissionController::class, 'show']);
 
         // Roster & Memory-Optimized Excel Import (Chunk Reading 200 rows)
         Route::get('/roster', [RosterController::class, 'index']);
         Route::post('/roster/import', [RosterController::class, 'importExcel']);
+        Route::post('/roster/sync', [RosterController::class, 'sync']);
+        Route::get('/export/roster', [RosterController::class, 'export']);
         Route::post('/roster/single', [RosterController::class, 'storeSingle']);
         Route::delete('/roster/{id}', [RosterController::class, 'destroy']);
 

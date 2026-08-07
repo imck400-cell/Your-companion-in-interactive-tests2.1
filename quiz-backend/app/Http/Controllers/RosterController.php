@@ -28,12 +28,14 @@ class RosterController extends Controller
             $query->where('role', $request->input('role'));
         }
 
-        $users = $query->orderBy('role', 'asc')->orderBy('name', 'asc')->get();
+        $users = $query->orderBy('role', 'asc')->orderBy('name', 'asc')->paginate(15);
 
         return response()->json([
             'status' => 'success',
-            'count' => $users->count(),
-            'data' => $users
+            'data' => $users->items(),
+            'current_page' => $users->currentPage(),
+            'last_page' => $users->lastPage(),
+            'total' => $users->total(),
         ]);
     }
 
@@ -128,5 +130,104 @@ class RosterController extends Controller
             'message' => 'تم حفظ المستخدم في السجل بنجاح',
             'data' => $rosterUser
         ]);
+    }
+
+    /**
+     * Sync an array of roster users using bulk chunk inserts.
+     */
+    public function sync(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'users' => 'required|array',
+            'users.*.name' => 'required|string',
+            'users.*.role' => 'nullable|string',
+        ]);
+
+        $usersData = $validated['users'];
+        $user = $request->user();
+        $schoolId = $user?->school_id;
+
+        DB::beginTransaction();
+        try {
+            // Chunking the array to insert 500 rows at a time
+            $chunks = array_chunk($usersData, 500);
+            foreach ($chunks as $chunk) {
+                $insertData = [];
+                $now = now();
+                foreach ($chunk as $userData) {
+                    $insertData[] = [
+                        'name' => $userData['name'],
+                        'role' => $userData['role'] ?? 'student',
+                        'school_id' => $schoolId,
+                        'grade' => $userData['grade'] ?? null,
+                        'section' => $userData['section'] ?? null,
+                        'serial_number' => $userData['serialNumber'] ?? ($userData['serial_number'] ?? null),
+                        'code' => $userData['code'] ?? null,
+                        'email' => $userData['email'] ?? null,
+                        'password' => bcrypt($userData['serialNumber'] ?? '12345678'), // Default password
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ];
+                }
+                User::insert($insertData);
+            }
+            DB::commit();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'تم استيراد الحسابات بنجاح'
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'status' => 'error',
+                'message' => 'فشل الاستيراد: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Export roster using a memory-efficient streamed response (CSV).
+     */
+    public function export(Request $request)
+    {
+        $user = $request->user();
+        $schoolId = $user?->school_id;
+
+        $headers = [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="roster_export.csv"',
+        ];
+
+        $callback = function () use ($schoolId) {
+            $file = fopen('php://output', 'w');
+            
+            // Add BOM for Excel UTF-8 compatibility
+            fputs($file, "\xEF\xBB\xBF");
+            
+            fputcsv($file, ['الاسم', 'الصفة', 'الصف', 'الشعبة', 'الرقم التسلسلي', 'الكود', 'البريد الإلكتروني']);
+
+            $query = User::query();
+            if ($schoolId) {
+                $query->where('school_id', $schoolId);
+            }
+
+            // Using cursor() to fetch data lazily without exhausting memory
+            foreach ($query->cursor() as $rosterUser) {
+                fputcsv($file, [
+                    $rosterUser->name,
+                    $rosterUser->role === 'teacher' ? 'معلم' : 'طالب',
+                    $rosterUser->grade,
+                    $rosterUser->section,
+                    $rosterUser->serial_number,
+                    $rosterUser->code,
+                    $rosterUser->email,
+                ]);
+            }
+
+            fclose($file);
+        };
+
+        return response()->streamDownload($callback, 'roster_export.csv', $headers);
     }
 }

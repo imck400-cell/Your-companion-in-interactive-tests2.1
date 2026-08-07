@@ -19,7 +19,7 @@ class QuizController extends Controller
     {
         $user = $request->user();
 
-        $query = Quiz::with('questions'); // Eager loading prevents N+1 query issues
+        $query = Quiz::with('questions')->withCount(['questions', 'submissions']); // Eager loading prevents N+1 query issues
 
         // Multi-tenant Isolation: Filter quizzes by school_id if available
         if ($user && $user->school_id) {
@@ -37,12 +37,14 @@ class QuizController extends Controller
             $query->where('is_archived', filter_var($request->input('is_archived'), FILTER_VALIDATE_BOOLEAN));
         }
 
-        $quizzes = $query->orderBy('created_at', 'desc')->get();
+        $quizzes = $query->orderBy('created_at', 'desc')->paginate(15);
 
         return response()->json([
             'status' => 'success',
-            'count' => $quizzes->count(),
-            'data' => $quizzes
+            'data' => $quizzes->items(),
+            'current_page' => $quizzes->currentPage(),
+            'last_page' => $quizzes->lastPage(),
+            'total' => $quizzes->total(),
         ]);
     }
 

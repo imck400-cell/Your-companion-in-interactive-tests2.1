@@ -9,9 +9,9 @@ export const fetchAllSubmissions = async () => {
   return res.data?.data || [];
 };
 
-export const fetchAllRosterUsers = async (schoolName?: string, forceRefresh?: boolean) => {
-  const res = await apiClient.get('/admin/users', { params: { schoolName, forceRefresh } });
-  return res.data?.data || [];
+export const fetchAllRosterUsers = async (schoolName?: string, forceRefresh?: boolean, page: number = 1) => {
+  const res = await apiClient.get('/admin/users', { params: { schoolName, forceRefresh, page } });
+  return res.data;
 };
 
 export const syncRosterToFirebase = async (users: RosterUser[]) => {

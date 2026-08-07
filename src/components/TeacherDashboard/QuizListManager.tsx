@@ -12,6 +12,9 @@ interface QuizListManagerProps {
   onViewAnalytics: (quiz: QuizMetadata) => void;
   onDeleteSuccess: () => void;
   onRefresh?: () => void;
+  currentPage?: number;
+  totalPages?: number;
+  onPageChange?: (page: number) => void;
 }
 
 export const QuizListManager: React.FC<QuizListManagerProps> = ({
@@ -22,6 +25,9 @@ export const QuizListManager: React.FC<QuizListManagerProps> = ({
   onViewAnalytics,
   onDeleteSuccess,
   onRefresh,
+  currentPage = 1,
+  totalPages = 1,
+  onPageChange,
 }) => {
   const [copiedQuizId, setCopiedQuizId] = useState<string | null>(null);
   const [qrModalQuiz, setQrModalQuiz] = useState<QuizMetadata | null>(null);
@@ -220,6 +226,29 @@ export const QuizListManager: React.FC<QuizListManagerProps> = ({
             </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && onPageChange && (
+        <div className="flex items-center justify-center gap-2 mt-6 pt-4 border-t border-slate-100">
+          <button
+            disabled={currentPage <= 1}
+            onClick={() => onPageChange(currentPage - 1)}
+            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed text-slate-700 text-sm font-bold rounded-lg transition-all"
+          >
+            السابق
+          </button>
+          <span className="text-sm font-bold text-slate-600 px-2">
+            صفحة {currentPage} من {totalPages}
+          </span>
+          <button
+            disabled={currentPage >= totalPages}
+            onClick={() => onPageChange(currentPage + 1)}
+            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed text-slate-700 text-sm font-bold rounded-lg transition-all"
+          >
+            التالي
+          </button>
         </div>
       )}
 

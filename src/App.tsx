@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { QuizMetadata, Question, TeacherProfile, RosterUser, Submission } from './types';
+import { QuizMetadata, Question, TeacherProfile, RosterUser, Submission, StudentInfo } from './types';
 import { HeaderBar } from './components/HeaderBar';
 import { FooterBranding } from './components/FooterBranding';
 import { WelcomeScreen } from './components/WelcomeScreen';
@@ -22,6 +22,7 @@ import { SubscriptionExpirationModal } from './components/SubscriptionExpiration
 import { GuestExpirationModal } from './components/GuestExpirationModal';
 import { fetchAllSubmissions, fetchAllRosterUsers, syncRosterToFirebase, subscribeToRoster, subscribeToSubmissions, saveSingleRosterUserToFirebase, auth, generateDeterministicUserId } from './services/adminService';
 import apiClient from './services/apiClient';
+import { SmartCache } from './services/smartCache';
 import { saveLocalQuiz } from './services/offlineDb';
 import { PlusCircle, BookOpen, BarChart3, GraduationCap, Sparkles, CheckCircle2, Library, UserCheck, ShieldCheck, Users, Archive, Loader2 } from 'lucide-react';
 
@@ -82,6 +83,7 @@ export default function App() {
   const handleUpdateRoster = (newRoster: RosterUser[]) => {
     setRoster(newRoster);
     localStorage.setItem('interactive_quiz_roster', JSON.stringify(newRoster));
+    SmartCache.invalidate(`roster_list_${teacherProfile?.schoolName || 'all'}`);
   };
 
   const handleUpdateSingleRosterUser = (updatedUser: RosterUser) => {
@@ -93,6 +95,7 @@ export default function App() {
     setRoster(newRoster);
     localStorage.setItem('interactive_quiz_roster', JSON.stringify(newRoster));
     saveSingleRosterUserToFirebase(updatedUser);
+    SmartCache.invalidate(`roster_list_${teacherProfile?.schoolName || 'all'}`);
   };
 
   // Teacher Profile & Login Modal
@@ -146,6 +149,11 @@ export default function App() {
   });
   const [parsedQuestions, setParsedQuestions] = useState<Question[]>([]);
   const [savedQuizzes, setSavedQuizzes] = useState<QuizMetadata[]>([]);
+  const [quizzesPage, setQuizzesPage] = useState<number>(1);
+  const [quizzesTotalPages, setQuizzesTotalPages] = useState<number>(1);
+  
+  const [rosterPage, setRosterPage] = useState<number>(1);
+  const [rosterTotalPages, setRosterTotalPages] = useState<number>(1);
   const [selectedQuizForAnalytics, setSelectedQuizForAnalytics] = useState<QuizMetadata | null>(null);
   const [isQuizzesLoading, setIsQuizzesLoading] = useState<boolean>(false);
   const [isSavingQuiz, setIsSavingQuiz] = useState<boolean>(false);
@@ -194,11 +202,28 @@ export default function App() {
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
 
-  const loadRosterFromFirebase = async (forceRefresh: boolean = false) => {
+  const loadRosterFromFirebase = async (forceRefresh: boolean = false, page: number = rosterPage) => {
     try {
-      const fetchedRoster = await fetchAllRosterUsers(teacherProfile?.schoolName, forceRefresh);
+      const cacheKey = `roster_list_${teacherProfile?.schoolName || 'all'}_page_${page}`;
+      if (!forceRefresh) {
+        const cachedRoster = SmartCache.get<any>(cacheKey);
+        if (cachedRoster) {
+          setRoster(cachedRoster.data);
+          setRosterTotalPages(cachedRoster.last_page);
+          return;
+        }
+      }
+
+      // We pass page to fetchAllRosterUsers
+      const response = await fetchAllRosterUsers(teacherProfile?.schoolName, forceRefresh, page);
+      const fetchedRoster = response?.data || [];
       if (fetchedRoster && fetchedRoster.length > 0) {
         setRoster(fetchedRoster);
+        setRosterTotalPages(response?.last_page || 1);
+        SmartCache.set(cacheKey, {
+          data: fetchedRoster,
+          last_page: response?.last_page || 1
+        });
       }
     } catch (err) {
       console.error('Error loading roster users:', err);
@@ -369,12 +394,28 @@ export default function App() {
     setTimeout(() => setSaveMessage(null), 4000);
   };
 
-  const loadQuizzes = async () => {
+  const loadQuizzes = async (forceRefresh = false, page = quizzesPage) => {
     setIsQuizzesLoading(true);
     try {
-      const response = await apiClient.get('/quizzes');
+      const cacheKey = `quizzes_list_page_${page}`;
+      if (!forceRefresh) {
+        const cachedQuizzes = SmartCache.get<any>(cacheKey);
+        if (cachedQuizzes) {
+          setSavedQuizzes(cachedQuizzes.data);
+          setQuizzesTotalPages(cachedQuizzes.last_page);
+          setIsQuizzesLoading(false);
+          return;
+        }
+      }
+
+      const response = await apiClient.get(`/quizzes?page=${page}`);
       if (response.data?.data) {
         setSavedQuizzes(response.data.data);
+        setQuizzesTotalPages(response.data.last_page || 1);
+        SmartCache.set(cacheKey, {
+          data: response.data.data,
+          last_page: response.data.last_page || 1
+        });
       }
     } catch (e: any) {
       console.warn('Failed to load quizzes via API:', e);
@@ -446,6 +487,9 @@ export default function App() {
         await saveLocalQuiz(serverQuiz, false);
         setSaveMessage('تم حفظ الاختبار واعتماده بنجاح!');
         setTeacherTab('manage');
+        
+        // Smart Cache Invalidation for Quizzes
+        SmartCache.invalidate('quizzes_list');
       }
     } catch (error: any) {
       if (!error.response && !navigator.onLine) {
@@ -793,8 +837,17 @@ export default function App() {
                   setSelectedQuizForAnalytics(quiz);
                   setTeacherTab('analytics');
                 }}
-                onDeleteSuccess={loadQuizzes}
-                onRefresh={loadQuizzes}
+                onDeleteSuccess={() => {
+                  SmartCache.invalidateAll();
+                  loadQuizzes(true);
+                }}
+                onRefresh={() => loadQuizzes(true)}
+                currentPage={quizzesPage}
+                totalPages={quizzesTotalPages}
+                onPageChange={(p) => {
+                  setQuizzesPage(p);
+                  loadQuizzes(false, p);
+                }}
               />
             )}
 
@@ -860,7 +913,16 @@ export default function App() {
                 currentSection={teacherProfile?.section}
                 teacherProfile={teacherProfile}
                 isAdmin={isAdminAuthenticated}
-                onRefreshRoster={() => loadRosterFromFirebase(true)}
+                onRefreshRoster={() => {
+                  SmartCache.invalidateAll();
+                  loadRosterFromFirebase(true);
+                }}
+                currentPage={rosterPage}
+                totalPages={rosterTotalPages}
+                onPageChange={(p) => {
+                  setRosterPage(p);
+                  loadRosterFromFirebase(false, p);
+                }}
               />
             )}
           </div>

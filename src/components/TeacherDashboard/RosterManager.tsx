@@ -43,6 +43,9 @@ interface RosterManagerProps {
   teacherProfile?: TeacherProfile | null;
   isAdmin?: boolean;
   onRefreshRoster?: () => void;
+  currentPage?: number;
+  totalPages?: number;
+  onPageChange?: (page: number) => void;
 }
 
 export const RosterManager: React.FC<RosterManagerProps> = ({
@@ -55,6 +58,9 @@ export const RosterManager: React.FC<RosterManagerProps> = ({
   teacherProfile,
   isAdmin = false,
   onRefreshRoster,
+  currentPage = 1,
+  totalPages = 1,
+  onPageChange,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState<'all' | 'student' | 'teacher'>('all');
@@ -159,13 +165,22 @@ export const RosterManager: React.FC<RosterManagerProps> = ({
     XLSX.writeFile(workbook, 'قالب_استيراد_الطلاب_والمعلمين.xlsx');
   };
 
-  // Stage 12: Server-Side RTL Excel Export with Data Validation Dropdowns & IF Formulas
-  const handleServerSideExport = () => {
+  // Server-Side Export using Streamed Response
+  const handleServerSideExport = async () => {
     try {
-      generateServerSideExcelExport(roster, `تقرير_الطلاب_والمعلمين_السيرفر_RTL.xlsx`);
-      setImportSuccess('تم توليد ملف Excel المنسق (RTL) المعتمد في السيرفر مع القوائم المنسدلة ودوال IF بنجاح!');
+      const response = await apiClient.get('/export/roster', {
+        responseType: 'blob',
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'تقرير_الطلاب_والمعلمين.csv');
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+      setImportSuccess('تم تصدير ملف CSV مباشرة من السيرفر بنجاح وبتدفق آمن!');
     } catch (err: any) {
-      setImportError('حدث خطأ أثناء تصدير ملف Excel عبر السيرفر: ' + err.message);
+      setImportError('حدث خطأ أثناء تصدير الملف عبر السيرفر: ' + err.message);
     }
   };
 
@@ -380,7 +395,7 @@ export const RosterManager: React.FC<RosterManagerProps> = ({
         createdAt: new Date().toISOString(),
       };
 
-      await apiClient.post('/roster', newUser);
+      await apiClient.post('/roster/single', newUser);
       onUpdateRoster([newUser, ...roster]);
 
       setAddName('');
@@ -989,6 +1004,29 @@ export const RosterManager: React.FC<RosterManagerProps> = ({
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Controls */}
+        {totalPages > 1 && onPageChange && (
+          <div className="flex items-center justify-center gap-2 mt-4 pt-4 border-t border-slate-100">
+            <button
+              disabled={currentPage <= 1}
+              onClick={() => onPageChange(currentPage - 1)}
+              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed text-slate-700 text-sm font-bold rounded-lg transition-all"
+            >
+              السابق
+            </button>
+            <span className="text-sm font-bold text-slate-600 px-2">
+              صفحة {currentPage} من {totalPages}
+            </span>
+            <button
+              disabled={currentPage >= totalPages}
+              onClick={() => onPageChange(currentPage + 1)}
+              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed text-slate-700 text-sm font-bold rounded-lg transition-all"
+            >
+              التالي
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Manual Add Modal */}

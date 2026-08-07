@@ -24,7 +24,7 @@ class StoreQuizRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'title' => ['required', 'string', 'max:150'],
+            'title' => ['required', 'string', 'max:255'],
             'lesson_number' => ['nullable', 'integer', 'min:1', 'max:50'],
             'subject' => ['required', 'string', 'max:100'],
             'main_subject' => ['nullable', 'string', 'max:100'],
@@ -45,7 +45,7 @@ class StoreQuizRequest extends FormRequest
             'allow_full_quiz_retake' => ['boolean'],
             'questions' => ['required', 'array', 'min:1'],
             'questions.*.type' => ['required', 'string', 'max:50'],
-            'questions.*.question_text' => ['required', 'string', 'max:5000'],
+            'questions.*.question_text' => ['required', 'string', 'max:2000'],
             'questions.*.options' => ['nullable', 'array'],
             'questions.*.correct_answer' => ['nullable', 'string', 'max:2000'],
             'questions.*.matching_pairs' => ['nullable', 'array'],
