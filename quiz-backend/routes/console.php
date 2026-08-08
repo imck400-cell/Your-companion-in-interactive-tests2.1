@@ -10,3 +10,4 @@ Artisan::command('inspire', function () {
 use Illuminate\Support\Facades\Schedule;
 
 Schedule::command('app:cleanup-guest-accounts')->daily();
+Schedule::command('db:backup')->dailyAt('00:00');

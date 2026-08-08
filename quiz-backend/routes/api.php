@@ -63,9 +63,9 @@ Route::middleware(['throttle:60,1'])->group(function () {
         Route::post('/admin/users', [RosterController::class, 'storeSingle']);
         Route::delete('/admin/users/{id}', [RosterController::class, 'destroy']);
 
-        // Analytics & Top Performance Endpoints
-        // Route::get('/analytics/top-performance', [AnalyticsController::class, 'topPerformance']);
-        // Route::get('/analytics/general-stats', [AnalyticsController::class, 'generalStats']);
+        // Analytics
+        Route::get('/analytics/dashboard', [AnalyticsController::class, 'dashboard']);
+        Route::get('/analytics/top-performance', [AnalyticsController::class, 'topPerformance']);
     });
 });
 

@@ -12,6 +12,77 @@ use Illuminate\Support\Facades\DB;
 class AnalyticsController extends Controller
 {
     /**
+     * Dashboard Analytics using strict SQL aggregations to prevent PHP RAM exhaustion.
+     * Route: GET /api/analytics/dashboard
+     */
+    public function dashboard(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $schoolId = $request->input('school_id') ?? ($user?->school_id);
+        $teacherId = $request->input('teacher_id') ?? ($user?->role === 'teacher' ? $user->id : null);
+
+        $baseQuery = DB::table('submissions');
+        
+        if ($schoolId) {
+            $baseQuery->where('school_id', $schoolId);
+        }
+        if ($teacherId) {
+            $baseQuery->where('teacher_id', $teacherId);
+        }
+
+        // 1. Total Completed Quizzes (count)
+        $totalQuizzes = (clone $baseQuery)->count();
+
+        // 2. Average Performance (avg)
+        $averagePerformance = (clone $baseQuery)->avg('percentage') ?? 0;
+
+        // 3. Weak Points: Top 3 missed questions (SQL JSON_TABLE extraction)
+        $whereSql = [];
+        $bindings = [];
+        
+        if ($schoolId) {
+            $whereSql[] = 'submissions.school_id = ?';
+            $bindings[] = $schoolId;
+        }
+        if ($teacherId) {
+            $whereSql[] = 'submissions.teacher_id = ?';
+            $bindings[] = $teacherId;
+        }
+        $whereSql[] = 'jt.isCorrect = false';
+        
+        $whereClause = 'WHERE ' . implode(' AND ', $whereSql);
+
+        $weakPointsSql = "
+            SELECT jt.questionText, COUNT(*) as mistakes_count
+            FROM submissions, 
+            JSON_TABLE(submissions.details, '$[*]' COLUMNS (
+                isCorrect BOOLEAN PATH '$.isCorrect',
+                questionText VARCHAR(1000) PATH '$.questionText'
+            )) AS jt
+            {$whereClause}
+            GROUP BY jt.questionText
+            ORDER BY mistakes_count DESC
+            LIMIT 3
+        ";
+        
+        try {
+            $weakPoints = DB::select($weakPointsSql, $bindings);
+        } catch (\Exception $e) {
+            // Fallback for older MySQL/MariaDB versions that do not support JSON_TABLE
+            $weakPoints = [];
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                'total_completed' => $totalQuizzes,
+                'average_performance' => round((float)$averagePerformance, 1),
+                'weak_points' => $weakPoints,
+            ]
+        ]);
+    }
+
+    /**
      * Get Top 5 failed/unsolved questions and Top 5 highest performing students.
      * Route: GET /api/analytics/top-performance
      */
